@@ -22,7 +22,7 @@ function angle(world: World, i: number): number {
   return Math.atan2(pos[4 * i + 2] - pos[4 * i], -(pos[4 * i + 3] - pos[4 * i + 1]));
 }
 
-export const pendulum: Scene = {
+export const pendulum: Scene<World> = {
   id: 'pendulum',
   stage: 1,
   title: 'Маятник і амплітуда',

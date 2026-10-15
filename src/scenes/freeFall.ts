@@ -12,7 +12,7 @@ const GRAVITY = new Vec2(0, -STANDARD_GRAVITY);
 
 const launchVelocity = (i: number) => Vec2.fromAngle(ANGLES[i] * DEG, SPEED);
 
-export const freeFall: Scene = {
+export const freeFall: Scene<World> = {
   id: 'free-fall',
   stage: 0,
   title: 'Вільне падіння',

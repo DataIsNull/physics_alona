@@ -61,6 +61,7 @@ export class Controls {
     trails: byId<HTMLInputElement>('layer-trails'),
     analytic: byId<HTMLInputElement>('layer-analytic'),
     velocities: byId<HTMLInputElement>('layer-velocities'),
+    contacts: byId<HTMLInputElement>('layer-contacts'),
   };
 
   constructor(
@@ -122,6 +123,7 @@ export class Controls {
       trails: this.layerInputs.trails.checked,
       analytic: this.layerInputs.analytic.checked,
       velocities: this.layerInputs.velocities.checked,
+      contacts: this.layerInputs.contacts.checked,
     };
   }
 
@@ -135,7 +137,7 @@ export class Controls {
 
     const summary = byId('integrator-summary');
     if (scene.fixedIntegrators) {
-      summary.textContent = 'У цій сцені кожен світ має власний інтегратор.';
+      summary.textContent = scene.integratorNote ?? 'У цій сцені кожен світ має власний інтегратор.';
     } else {
       const info = integratorInfo(integrator);
       summary.textContent = `${info.name}: ${info.summary}`;

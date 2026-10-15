@@ -12,7 +12,7 @@ const AMPLITUDE = 1; // m
 const OMEGA = Math.sqrt(STIFFNESS / MASS);
 const ANCHOR = new Vec2(-REST_LENGTH, 0);
 
-export const springOscillator: Scene = {
+export const springOscillator: Scene<World> = {
   id: 'spring',
   stage: 0,
   title: 'Пружинний маятник',

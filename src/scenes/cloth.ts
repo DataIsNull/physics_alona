@@ -47,7 +47,7 @@ function rods(): DistanceConstraint[] {
   return out;
 }
 
-export const cloth: Scene = {
+export const cloth: Scene<World> = {
   id: 'cloth',
   stage: 1,
   title: 'Сітка',

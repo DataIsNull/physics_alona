@@ -3,6 +3,7 @@ import { ConstraintSolver, type DistanceConstraint } from './constraints';
 import type { Force } from './forces';
 import { type AccelFn, type Integrator, type IntegratorId, createIntegrator, integratorInfo } from './integrators';
 import { type ParticleSpec, Particles } from './particles';
+import type { Simulation, TrailSource } from './simulation';
 import { Vec2 } from './vec2';
 
 export interface WorldOptions {
@@ -31,13 +32,17 @@ export interface Grab {
 }
 
 /** Natural frequency of the critically damped spring that drags grabbed particles, rad/s. */
-const GRAB_OMEGA = 2 * Math.PI * 3;
+export const GRAB_OMEGA = 2 * Math.PI * 3;
+/** Extra pick tolerance around particles, screen pixels. */
+const PICK_SLACK_PX = 8;
+/** Smallest drawn particle radius, screen pixels; picking matches it. */
+export const MIN_PARTICLE_PX = 3;
 
 /**
  * A self-contained particle system. One step runs the pipeline:
  * forces → integrator → constraints → collisions.
  */
-export class World {
+export class World implements Simulation {
   readonly particles: Particles;
   readonly forces: readonly Force[];
   readonly constraints: readonly DistanceConstraint[];
@@ -209,6 +214,51 @@ export class World {
       py += mass[i] * vel[2 * i + 1];
     }
     return new Vec2(px, py);
+  }
+
+  trailSources(): TrailSource[] {
+    const { pos, color, trail } = this.particles;
+    const sources: TrailSource[] = [];
+    trail.forEach((keep, i) => {
+      if (keep) sources.push({ color: color[i], x: () => pos[2 * i], y: () => pos[2 * i + 1] });
+    });
+    return sources;
+  }
+
+  hitTest(point: Vec2, pixel: number): boolean {
+    return this.nearestParticle(point, pixel) !== null;
+  }
+
+  grabAt(point: Vec2, pixel: number): boolean {
+    const i = this.nearestParticle(point, pixel);
+    if (i === null) return false;
+    this.grab = { particle: i, target: point };
+    return true;
+  }
+
+  dragTo(point: Vec2): void {
+    if (this.grab) this.grab.target = point;
+  }
+
+  release(): void {
+    this.grab = null;
+  }
+
+  /** Closest particle whose drawn disc (plus slack) contains `point`. */
+  private nearestParticle(point: Vec2, pixel: number): number | null {
+    if (this.diverged) return null;
+    const { count, pos, radius } = this.particles;
+    let best: number | null = null;
+    let bestDistance = Infinity;
+    for (let i = 0; i < count; i++) {
+      const d = Math.hypot(pos[2 * i] - point.x, pos[2 * i + 1] - point.y);
+      const reach = Math.max(radius[i], MIN_PARTICLE_PX * pixel) + PICK_SLACK_PX * pixel;
+      if (d <= reach && d < bestDistance) {
+        best = i;
+        bestDistance = d;
+      }
+    }
+    return best;
   }
 
   private dissipativePower(): number {

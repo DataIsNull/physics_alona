@@ -34,7 +34,7 @@ function separation(a: World, b: World): number {
 
 const radians = (v: number) => (v >= 0.01 ? `${Number(v.toPrecision(2))} рад` : `${v.toExponential(0)} рад`);
 
-export const doublePendulum: Scene = {
+export const doublePendulum: Scene<World> = {
   id: 'double-pendulum',
   stage: 1,
   title: 'Подвійний маятник: хаос',

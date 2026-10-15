@@ -1,5 +1,5 @@
+import type { Simulation } from '../core/simulation';
 import { formatPercent, formatSI } from '../core/units';
-import type { World } from '../core/world';
 import type { SeriesSpec } from '../render/graph';
 import { theme } from '../render/theme';
 import type { GraphSpec } from './types';
@@ -40,8 +40,8 @@ export function energyGraph(options: { potential?: boolean; losses?: boolean } =
 }
 
 /** One series per world, labelled and coloured like the world. */
-export function perWorldGraph(title: string, format: (v: number) => string, value: (world: World) => number) {
-  return (worlds: readonly World[]): GraphSpec => ({
+export function perWorldGraph(title: string, format: (v: number) => string, value: (sim: Simulation) => number) {
+  return (worlds: readonly Simulation[]): GraphSpec => ({
     title,
     series: worlds.map((w) => ({ label: w.label, color: w.color })),
     format,

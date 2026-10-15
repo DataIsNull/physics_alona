@@ -17,7 +17,7 @@ const SPACING = 5; // m between centres
 
 const center = (i: number) => new Vec2((i - (INTEGRATORS.length - 1) / 2) * SPACING, 0);
 
-export const integratorCompare: Scene = {
+export const integratorCompare: Scene<World> = {
   id: 'integrator-compare',
   stage: 0,
   title: 'Порівняння інтеграторів',

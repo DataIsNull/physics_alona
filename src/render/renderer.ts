@@ -1,9 +1,12 @@
 import type { Wall } from '../core/collisions';
 import { Spring, type SpringEnd } from '../core/forces';
+import type { Simulation, TrailSource } from '../core/simulation';
 import type { Vec2 } from '../core/vec2';
-import type { World } from '../core/world';
+import { MIN_PARTICLE_PX, World } from '../core/world';
+import { RigidWorld } from '../rigid/world';
 import type { Camera } from './camera';
 import { drawGrid } from './grid';
+import { drawRigidWorld } from './rigidRenderer';
 import { theme } from './theme';
 import type { Trail } from './trail';
 
@@ -11,12 +14,15 @@ export interface RenderLayers {
   trails: boolean;
   velocities: boolean;
   analytic: boolean;
+  /** Contact points and normals of rigid bodies. */
+  contacts: boolean;
 }
 
-/** A world plus per-particle render state; null where a particle keeps no trail. */
-export interface WorldView {
-  world: World;
-  trails: (Trail | null)[];
+/** A simulation plus its motion trails, one per trail source. */
+export interface SimView {
+  sim: Simulation;
+  sources: TrailSource[];
+  trails: Trail[];
 }
 
 /** Exact solution: position of `particle` in world `world` at time t, if known. */
@@ -24,7 +30,6 @@ export type AnalyticFn = (world: number, particle: number, t: number) => Vec2 | 
 
 /** Velocity arrows show the displacement over this much time, s. */
 const VELOCITY_ARROW_TIME = 0.25;
-const MIN_PARTICLE_PX = 3;
 
 export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -52,31 +57,36 @@ export class Renderer {
     return changed;
   }
 
-  render(views: readonly WorldView[], layers: RenderLayers, analytic?: AnalyticFn): void {
+  render(views: readonly SimView[], layers: RenderLayers, analytic?: AnalyticFn): void {
     const { ctx, camera } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = theme.surface;
     ctx.fillRect(0, 0, camera.width, camera.height);
     drawGrid(ctx, camera);
 
-    for (const { world } of views) {
+    for (const view of views) {
+      if (view.sim instanceof RigidWorld) drawRigidWorld(ctx, camera, view.sim, layers);
+    }
+    const worlds = views.map((v) => v.sim).filter((s): s is World => s instanceof World);
+    for (const world of worlds) {
       for (const w of world.collisions?.walls ?? []) this.drawWall(w);
     }
-    for (const { world } of views) {
+    for (const world of worlds) {
       this.drawSprings(world);
       this.drawRods(world);
     }
     if (layers.trails) {
-      for (const view of views) {
-        view.trails.forEach((trail, i) => trail && this.drawTrail(trail, view.world.particles.color[i]));
-      }
+      for (const view of views) view.trails.forEach((trail, k) => this.drawTrail(trail, view.sources[k].color));
     }
     if (layers.analytic && analytic) {
-      views.forEach((view, w) => this.drawGhosts(view.world, (i) => analytic(w, i, view.world.t)));
+      views.forEach((view, w) => {
+        const sim = view.sim;
+        if (sim instanceof World) this.drawGhosts(sim, (i) => analytic(w, i, sim.t));
+      });
     }
-    for (const { world } of views) this.drawParticles(world);
-    if (layers.velocities) for (const { world } of views) this.drawVelocities(world);
-    for (const { world } of views) this.drawGrab(world);
+    for (const world of worlds) this.drawParticles(world);
+    if (layers.velocities) for (const world of worlds) this.drawVelocities(world);
+    for (const world of worlds) this.drawGrab(world);
   }
 
   /** Shades the solid side of a wall and draws its surface line. */
@@ -300,9 +310,4 @@ function drawArrow(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: nu
   ctx.lineTo(x1 - ux * head + uy * head * 0.5, y1 - uy * head - ux * head * 0.5);
   ctx.closePath();
   ctx.fill();
-}
-
-/** Screen-space hit radius for picking a particle with the pointer, px. */
-export function pickRadius(world: World, i: number, scale: number): number {
-  return Math.max(world.particles.radius[i] * scale, MIN_PARTICLE_PX) + 8;
 }

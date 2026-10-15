@@ -32,7 +32,7 @@ function rack(): ParticleSpec[] {
   return balls;
 }
 
-export const billiards: Scene = {
+export const billiards: Scene<World> = {
   id: 'billiards',
   stage: 1,
   title: 'Більярд',

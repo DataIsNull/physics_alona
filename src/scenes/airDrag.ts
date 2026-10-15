@@ -27,7 +27,7 @@ const CASES: Array<{ label: string; drag: Force | null }> = [
   { label: 'Повітря (v²)', drag: new QuadraticDrag(AIR_DENSITY, DRAG_COEFFICIENT) },
 ];
 
-export const airDrag: Scene = {
+export const airDrag: Scene<World> = {
   id: 'air-drag',
   stage: 1,
   title: 'Опір повітря',

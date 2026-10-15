@@ -10,7 +10,7 @@ const RESTITUTION = [0.9, 0.7, 0.5, 0.3];
 const RADIUS = 0.1; // m
 const DROP_HEIGHT = 2; // m, of the centre
 
-export const bouncingBalls: Scene = {
+export const bouncingBalls: Scene<World> = {
   id: 'bouncing-balls',
   stage: 1,
   title: 'Стрибки м’ячів',
