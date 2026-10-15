@@ -1,0 +1,181 @@
+import { INTEGRATORS, type IntegratorId, integratorInfo } from '../core/integrators';
+import { formatSI } from '../core/units';
+import type { Vec2 } from '../core/vec2';
+import type { RenderLayers } from '../render/renderer';
+import type { Scene } from '../scenes/types';
+import { byId, noFocusOnClick } from './dom';
+
+export interface ControlHandlers {
+  scene(id: string): void;
+  integrator(id: IntegratorId): void;
+  togglePause(): void;
+  step(): void;
+  reset(): void;
+  fit(): void;
+  timeScale(value: number): void;
+  dt(value: number): void;
+  layers(layers: RenderLayers): void;
+}
+
+const SLIDER_MAX = 1000;
+
+/** Range input mapped onto a logarithmic value range. */
+class LogSlider {
+  constructor(
+    private readonly input: HTMLInputElement,
+    private readonly output: HTMLOutputElement,
+    private readonly lo: number,
+    private readonly hi: number,
+    private readonly format: (v: number) => string,
+    onChange: (v: number) => void,
+    snap?: (v: number) => number,
+  ) {
+    input.min = '0';
+    input.max = String(SLIDER_MAX);
+    input.step = '1';
+    input.addEventListener('input', () => {
+      const raw = this.lo * (this.hi / this.lo) ** (Number(input.value) / SLIDER_MAX);
+      const value = snap ? snap(raw) : raw;
+      this.output.value = this.format(value);
+      onChange(value);
+    });
+  }
+
+  set(value: number): void {
+    this.input.value = String(Math.round((SLIDER_MAX * Math.log(value / this.lo)) / Math.log(this.hi / this.lo)));
+    this.output.value = this.format(value);
+  }
+}
+
+/** Toolbar, scene info and keyboard shortcuts. */
+export class Controls {
+  private readonly sceneSelect = byId<HTMLSelectElement>('scene');
+  private readonly integratorSelect = byId<HTMLSelectElement>('integrator');
+  private readonly playButton = byId<HTMLButtonElement>('play');
+  private readonly status = byId('status');
+  private readonly cursor = byId('cursor');
+  private readonly dtSlider: LogSlider;
+  private readonly speedSlider: LogSlider;
+  private readonly layerInputs = {
+    trails: byId<HTMLInputElement>('layer-trails'),
+    analytic: byId<HTMLInputElement>('layer-analytic'),
+    velocities: byId<HTMLInputElement>('layer-velocities'),
+  };
+
+  constructor(
+    scenes: readonly Scene[],
+    private readonly on: ControlHandlers,
+  ) {
+    for (const scene of scenes) this.sceneSelect.add(new Option(scene.title, scene.id));
+    for (const info of INTEGRATORS) this.integratorSelect.add(new Option(`${info.name} (порядок ${info.order})`, info.id));
+
+    this.sceneSelect.addEventListener('change', () => on.scene(this.sceneSelect.value));
+    this.integratorSelect.addEventListener('change', () => on.integrator(this.integratorSelect.value as IntegratorId));
+
+    const buttons: Array<[string, () => void]> = [
+      ['play', on.togglePause],
+      ['step', on.step],
+      ['reset', on.reset],
+      ['fit', on.fit],
+    ];
+    for (const [id, handler] of buttons) {
+      const button = byId<HTMLButtonElement>(id);
+      noFocusOnClick(button);
+      button.addEventListener('click', handler);
+    }
+
+    this.speedSlider = new LogSlider(
+      byId('time-scale'),
+      byId('time-scale-out'),
+      0.05,
+      20,
+      (v) => `×${v < 1 ? v.toFixed(2) : v.toPrecision(3)}`,
+      on.timeScale,
+      (v) => (Math.abs(v - 1) < 0.06 ? 1 : v),
+    );
+    this.speedSlider.set(1);
+    this.dtSlider = new LogSlider(byId('dt'), byId('dt-out'), 1e-4, 0.5, (v) => formatSI(v, 'с'), on.dt);
+
+    for (const input of Object.values(this.layerInputs)) {
+      input.addEventListener('change', () => on.layers(this.layers));
+    }
+
+    window.addEventListener('keydown', (e) => this.onKey(e));
+
+    // On phones the scene description would cover half the canvas; start it collapsed.
+    if (window.matchMedia('(max-width: 860px)').matches) byId<HTMLDetailsElement>('hud').open = false;
+  }
+
+  get layers(): RenderLayers {
+    return {
+      trails: this.layerInputs.trails.checked,
+      analytic: this.layerInputs.analytic.checked,
+      velocities: this.layerInputs.velocities.checked,
+    };
+  }
+
+  showScene(scene: Scene, integrator: IntegratorId): void {
+    this.sceneSelect.value = scene.id;
+    this.integratorSelect.value = integrator;
+    this.integratorSelect.disabled = !!scene.fixedIntegrators;
+    this.layerInputs.analytic.disabled = !scene.analytic;
+    byId('scene-title').textContent = scene.title;
+    byId('scene-description').textContent = scene.description;
+
+    const summary = byId('integrator-summary');
+    if (scene.fixedIntegrators) {
+      summary.textContent = 'У цій сцені кожен світ має власний інтегратор.';
+    } else {
+      const info = integratorInfo(integrator);
+      summary.textContent = `${info.name}: ${info.summary}`;
+    }
+  }
+
+  setPaused(paused: boolean): void {
+    this.playButton.classList.toggle('is-paused', paused);
+    this.playButton.setAttribute('aria-label', paused ? 'Пуск' : 'Пауза');
+    this.playButton.title = paused ? 'Пуск (Пробіл)' : 'Пауза (Пробіл)';
+  }
+
+  setDt(dt: number): void {
+    this.dtSlider.set(dt);
+  }
+
+  showStatus(text: string): void {
+    this.status.textContent = text;
+    this.status.hidden = text === '';
+  }
+
+  showCursor(world: Vec2 | null): void {
+    this.cursor.textContent = world ? `x ${formatSI(world.x, 'м')}   y ${formatSI(world.y, 'м')}` : '';
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    if (target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+    const onSlider = target instanceof HTMLInputElement && target.type === 'range';
+
+    // e.code is layout-independent, so shortcuts work on the Ukrainian layout too.
+    switch (e.code) {
+      case 'Space':
+        e.preventDefault();
+        this.on.togglePause();
+        break;
+      case 'Period':
+        this.on.step();
+        break;
+      case 'ArrowRight':
+        if (onSlider) return;
+        e.preventDefault();
+        this.on.step();
+        break;
+      case 'KeyR':
+        this.on.reset();
+        break;
+      case 'KeyF':
+        this.on.fit();
+        break;
+    }
+  }
+}
