@@ -1,4 +1,4 @@
-import { formatSI } from '../core/units';
+import { type LengthUnit, METRES, formatLength } from '../core/units';
 import type { Camera } from './camera';
 import { theme } from './theme';
 
@@ -9,9 +9,9 @@ export function niceStep(min: number): number {
   return 10 * base;
 }
 
-/** Metric grid with labelled lines; spacing adapts to the zoom level. */
-export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, unit = 'м'): void {
-  const step = niceStep(80 / camera.scale);
+/** Labelled grid; spacing adapts to the zoom level and is "nice" in the display unit. */
+export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, unit: LengthUnit = METRES): void {
+  const step = niceStep(80 / (camera.scale * unit.metres)) * unit.metres;
   const { min, max } = camera.visibleBounds();
   const { width, height } = camera;
 
@@ -30,7 +30,7 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, unit = '
     ctx.moveTo(sx, 0);
     ctx.lineTo(sx, height);
     ctx.stroke();
-    ctx.fillText(formatSI(i * step, unit), sx + 4, height - 4);
+    ctx.fillText(formatLength(i * step, unit), sx + 4, height - 4);
   }
 
   const firstY = Math.ceil(min.y / step);
@@ -43,6 +43,6 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, unit = '
     ctx.moveTo(0, sy);
     ctx.lineTo(width, sy);
     ctx.stroke();
-    ctx.fillText(formatSI(i * step, unit), 4, sy + 3);
+    ctx.fillText(formatLength(i * step, unit), 4, sy + 3);
   }
 }

@@ -15,7 +15,10 @@ const OFFSET = new Vec2(0.9, 0); // m, from centre
 const VELOCITY = new Vec2(0, 0.45 * OMEGA); // m/s → ellipse 0.9 × 0.45 m
 const SPACING = 5; // m between centres
 
-const center = (i: number) => new Vec2((i - (INTEGRATORS.length - 1) / 2) * SPACING, 0);
+/** Leapfrog moves exactly like velocity Verlet here, so it would only duplicate a panel. */
+const COMPARED = INTEGRATORS.filter((info) => info.id !== 'leapfrog');
+
+const center = (i: number) => new Vec2((i - (COMPARED.length - 1) / 2) * SPACING, 0);
 
 export const integratorCompare: Scene<World> = {
   id: 'integrator-compare',
@@ -29,7 +32,7 @@ export const integratorCompare: Scene<World> = {
   fixedIntegrators: true,
   loopAfter: 12,
   build: () =>
-    INTEGRATORS.map(
+    COMPARED.map(
       (info, i) =>
         new World({
           integrator: info.id,

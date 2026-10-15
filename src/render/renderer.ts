@@ -1,6 +1,7 @@
 import type { Wall } from '../core/collisions';
 import { Spring, type SpringEnd } from '../core/forces';
 import type { Simulation, TrailSource } from '../core/simulation';
+import { type LengthUnit, METRES } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import { MIN_PARTICLE_PX, World } from '../core/world';
 import { RigidWorld } from '../rigid/world';
@@ -31,7 +32,12 @@ export type AnalyticFn = (world: number, particle: number, t: number) => Vec2 | 
 /** Velocity arrows show the displacement over this much time, s. */
 const VELOCITY_ARROW_TIME = 0.25;
 
+/** Scene-specific drawing on top of everything else. */
+export type Overlay = (ctx: CanvasRenderingContext2D, camera: Camera, sims: readonly Simulation[]) => void;
+
 export class Renderer {
+  /** Display unit for grid labels. */
+  unit: LengthUnit = METRES;
   private readonly ctx: CanvasRenderingContext2D;
   private dpr = 1;
 
@@ -57,12 +63,13 @@ export class Renderer {
     return changed;
   }
 
-  render(views: readonly SimView[], layers: RenderLayers, analytic?: AnalyticFn): void {
+  render(views: readonly SimView[], layers: RenderLayers, analytic?: AnalyticFn, overlay?: Overlay): void {
     const { ctx, camera } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = theme.surface;
     ctx.fillRect(0, 0, camera.width, camera.height);
-    drawGrid(ctx, camera);
+    drawGrid(ctx, camera, this.unit);
+    overlay?.(ctx, camera, views.map((v) => v.sim));
 
     for (const view of views) {
       if (view.sim instanceof RigidWorld) drawRigidWorld(ctx, camera, view.sim, layers);
@@ -202,6 +209,7 @@ export class Renderer {
   private drawParticles(world: World): void {
     const { ctx, camera } = this;
     const { count, pos, radius, color } = world.particles;
+    const crowd = count > 300;
     for (let i = 0; i < count; i++) {
       const x = camera.toScreenX(pos[2 * i]);
       const y = camera.toScreenY(pos[2 * i + 1]);
@@ -211,10 +219,17 @@ export class Renderer {
         if (fixed) drawAnchor(ctx, x, y);
         continue;
       }
-      const r = Math.max(radius[i] * camera.scale, MIN_PARTICLE_PX);
+      const realRadius = radius[i] * camera.scale;
+      if (crowd && realRadius < 1.2 && !fixed) {
+        // Star-field fast path: thousands of specks are cheaper as tiny squares.
+        ctx.fillStyle = color[i];
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+        continue;
+      }
+      const r = Math.max(realRadius, MIN_PARTICLE_PX);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = fixed ? theme.anchor : color[i];
+      ctx.fillStyle = color[i];
       ctx.fill();
       // 2px surface ring keeps overlapping particles distinct
       ctx.strokeStyle = theme.surface;

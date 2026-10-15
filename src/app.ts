@@ -2,6 +2,7 @@ import { FixedStepClock } from './core/clock';
 import type { IntegratorId } from './core/integrators';
 import type { Simulation } from './core/simulation';
 import type { Vec2 } from './core/vec2';
+import { METRES } from './core/units';
 import { World } from './core/world';
 import { Camera } from './render/camera';
 import { TimeGraph } from './render/graph';
@@ -9,16 +10,23 @@ import { type RenderLayers, Renderer, type SimView } from './render/renderer';
 import { Trail } from './render/trail';
 import { SCENES } from './scenes';
 import type { GraphSpec, Scene } from './scenes/types';
-import { Controls } from './ui/controls';
+import { Controls, DEFAULT_DT_RANGE, DEFAULT_SPEED_RANGE } from './ui/controls';
 import { byId } from './ui/dom';
 import { attachCameraInput } from './ui/input';
 import { StatsPanel, type WorldStats } from './ui/stats';
 
-/** Sampling intervals in simulated seconds. */
-const TRAIL_INTERVAL = 1 / 120;
-const GRAPH_INTERVAL = 1 / 60;
+/**
+ * Trails and graphs are sampled on real time (per displayed frame), so a
+ * year-per-second orbit and a ×1 spring both get smooth curves.
+ */
+const TRAIL_SAMPLES_PER_SECOND = 120;
+const GRAPH_SAMPLES_PER_SECOND = 60;
+/** Trail points closer than this on screen are skipped, px. */
+const TRAIL_SPACING_PX = 1.5;
 /** Stats and legend text refresh rate, ms of real time. */
 const STATS_INTERVAL = 120;
+/** Real time the physics may take per frame before the clock drops the backlog, ms. */
+const PHYSICS_BUDGET_MS = 30;
 
 /** Wires the simulation loop to rendering and UI. */
 export class App {
@@ -70,7 +78,7 @@ export class App {
     const canvas = byId<HTMLCanvasElement>('sim');
     attachCameraInput(canvas, this.camera, {
       onCursor: (p, sx, sy) => {
-        this.controls.showCursor(p);
+        this.controls.showCursor(p, this.renderer.unit);
         canvas.classList.toggle('can-grab', p !== null && this.pick(sx, sy) !== null);
       },
       onFit: () => this.fit(),
@@ -92,10 +100,19 @@ export class App {
   }
 
   private loadScene(id: string): void {
-    this.scene = SCENES.find((s) => s.id === id) ?? SCENES[0];
-    this.clock.dt = this.scene.dt;
-    this.controls.setDt(this.scene.dt);
-    this.controls.showScene(this.scene, this.integrator);
+    const scene = SCENES.find((s) => s.id === id) ?? SCENES[0];
+    this.scene = scene;
+    this.integrator = scene.integrator ?? 'velocity-verlet';
+    this.clock.dt = scene.dt;
+    this.clock.timeScale = scene.speed ?? 1;
+    this.controls.setTimeControls(
+      scene.dt,
+      scene.dtRange ?? DEFAULT_DT_RANGE,
+      this.clock.timeScale,
+      scene.speedRange ?? DEFAULT_SPEED_RANGE,
+    );
+    this.renderer.unit = scene.lengthUnit ?? METRES;
+    this.controls.showScene(scene, this.integrator);
     this.buildWorlds();
     this.needsFit = true;
     history.replaceState(null, '', `#${this.scene.id}`);
@@ -122,6 +139,7 @@ export class App {
     this.stats.configure(
       worlds.map((w) => ({ label: w.label, color: w.color, dissipative: w.dissipative })),
       !!this.scene.analytic,
+      this.renderer.unit,
     );
     this.restart();
   }
@@ -159,29 +177,38 @@ export class App {
     this.camera.fit(this.scene.view);
   }
 
-  private advance(steps: number): void {
+  /** Runs up to `steps` physics steps; returns how many ran within the frame budget. */
+  private advance(steps: number): number {
     const dt = this.clock.dt;
+    const start = performance.now();
     for (let s = 0; s < steps; s++) {
       for (const sim of this.sims) sim.step(dt);
       this.time += dt;
       this.stepCount++;
       this.sample();
       if (this.scene.loopAfter !== undefined && this.time >= this.scene.loopAfter) this.reset();
+      if (performance.now() - start > PHYSICS_BUDGET_MS) {
+        // Heavy scene: show what we have rather than freezing the page.
+        this.clock.dropBacklog();
+        return s + 1;
+      }
     }
+    return steps;
   }
 
   private sample(): void {
     const eps = 1e-12;
     if (this.time >= this.nextTrailSample - eps) {
+      const spacing = TRAIL_SPACING_PX / this.camera.scale;
       for (const { sim, sources, trails } of this.views) {
         if (sim.diverged) continue;
-        sources.forEach((source, k) => trails[k].push(source.x(), source.y()));
+        sources.forEach((source, k) => trails[k].push(source.x(), source.y(), spacing));
       }
-      this.nextTrailSample = this.time + TRAIL_INTERVAL;
+      this.nextTrailSample = this.time + this.clock.timeScale / TRAIL_SAMPLES_PER_SECOND;
     }
     if (this.time >= this.nextGraphSample - eps) {
       this.graph.push(this.time, this.graphSpec.sample(this.sims));
-      this.nextGraphSample = this.time + GRAPH_INTERVAL;
+      this.nextGraphSample = this.time + this.clock.timeScale / GRAPH_SAMPLES_PER_SECOND;
     }
   }
 
@@ -245,16 +272,14 @@ export class App {
     this.lastFrame = now;
     this.countFrame(now);
 
-    const steps = this.clock.advance(realDt);
-    this.advance(steps);
-    this.stepsLastFrame = steps;
+    this.stepsLastFrame = this.advance(this.clock.advance(realDt));
 
     this.renderer.resize();
     if (this.needsFit) {
       this.fit();
       this.needsFit = false;
     }
-    this.renderer.render(this.views, this.layers, this.scene.analytic);
+    this.renderer.render(this.views, this.layers, this.scene.analytic, this.scene.overlay?.bind(this.scene));
     this.graph.draw();
 
     if (now - this.lastStats >= STATS_INTERVAL) {

@@ -1,5 +1,5 @@
 import { INTEGRATORS, type IntegratorId, integratorInfo } from '../core/integrators';
-import { formatSI } from '../core/units';
+import { type LengthUnit, METRES, formatDuration, formatLength } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import type { RenderLayers } from '../render/renderer';
 import { STAGES } from '../scenes';
@@ -19,14 +19,16 @@ export interface ControlHandlers {
 }
 
 const SLIDER_MAX = 1000;
+export const DEFAULT_DT_RANGE = [1e-4, 0.5] as const;
+export const DEFAULT_SPEED_RANGE = [0.05, 20] as const;
 
 /** Range input mapped onto a logarithmic value range. */
 class LogSlider {
   constructor(
     private readonly input: HTMLInputElement,
     private readonly output: HTMLOutputElement,
-    private readonly lo: number,
-    private readonly hi: number,
+    private lo: number,
+    private hi: number,
     private readonly format: (v: number) => string,
     onChange: (v: number) => void,
     snap?: (v: number) => number,
@@ -40,6 +42,11 @@ class LogSlider {
       this.output.value = this.format(value);
       onChange(value);
     });
+  }
+
+  setRange(lo: number, hi: number): void {
+    this.lo = lo;
+    this.hi = hi;
   }
 
   set(value: number): void {
@@ -99,14 +106,14 @@ export class Controls {
     this.speedSlider = new LogSlider(
       byId('time-scale'),
       byId('time-scale-out'),
-      0.05,
-      20,
-      (v) => `×${v < 1 ? v.toFixed(2) : v.toPrecision(3)}`,
+      ...DEFAULT_SPEED_RANGE,
+      // Up to ×60 read as a factor; beyond that as simulated time per real second.
+      (v) => (v <= 60 ? `×${v < 1 ? v.toFixed(2) : Number(v.toPrecision(3))}` : `${formatDuration(v, 2)}/с`),
       on.timeScale,
       (v) => (Math.abs(v - 1) < 0.06 ? 1 : v),
     );
     this.speedSlider.set(1);
-    this.dtSlider = new LogSlider(byId('dt'), byId('dt-out'), 1e-4, 0.5, (v) => formatSI(v, 'с'), on.dt);
+    this.dtSlider = new LogSlider(byId('dt'), byId('dt-out'), ...DEFAULT_DT_RANGE, (v) => formatDuration(v), on.dt);
 
     for (const input of Object.values(this.layerInputs)) {
       input.addEventListener('change', () => on.layers(this.layers));
@@ -150,8 +157,12 @@ export class Controls {
     this.playButton.title = paused ? 'Пуск (Пробіл)' : 'Пауза (Пробіл)';
   }
 
-  setDt(dt: number): void {
+  /** Applies a scene's step and speed ranges and their starting values. */
+  setTimeControls(dt: number, dtRange: readonly [number, number], speed: number, speedRange: readonly [number, number]): void {
+    this.dtSlider.setRange(...dtRange);
     this.dtSlider.set(dt);
+    this.speedSlider.setRange(...speedRange);
+    this.speedSlider.set(speed);
   }
 
   showStatus(text: string): void {
@@ -159,8 +170,8 @@ export class Controls {
     this.status.hidden = text === '';
   }
 
-  showCursor(world: Vec2 | null): void {
-    this.cursor.textContent = world ? `x ${formatSI(world.x, 'м')}   y ${formatSI(world.y, 'м')}` : '';
+  showCursor(world: Vec2 | null, unit: LengthUnit = METRES): void {
+    this.cursor.textContent = world ? `x ${formatLength(world.x, unit)}   y ${formatLength(world.y, unit)}` : '';
   }
 
   private onKey(e: KeyboardEvent): void {

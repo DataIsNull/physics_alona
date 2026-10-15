@@ -1,4 +1,4 @@
-import { formatPercent, formatSI } from '../core/units';
+import { type LengthUnit, METRES, formatDuration, formatLength, formatPercent, formatSI } from '../core/units';
 
 export interface WorldStats {
   energy: number;
@@ -30,13 +30,16 @@ interface WorldRow {
 export class StatsPanel {
   private clock: Record<keyof ClockStats, HTMLElement> | null = null;
   private rows: WorldRow[] = [];
+  private unit: LengthUnit = METRES;
 
   constructor(private readonly root: HTMLElement) {}
 
   configure(
     worlds: ReadonlyArray<{ label: string; color: string; dissipative: boolean }>,
     hasAnalytic: boolean,
+    unit: LengthUnit = METRES,
   ): void {
+    this.unit = unit;
     this.root.replaceChildren();
 
     const clockBlock = block('Час');
@@ -105,9 +108,9 @@ export class StatsPanel {
 
   update(clock: ClockStats, worlds: readonly WorldStats[]): void {
     if (!this.clock) return;
-    this.clock.time.textContent = formatSI(clock.time, 'с', 4);
+    this.clock.time.textContent = formatDuration(clock.time, 4);
     this.clock.steps.textContent = clock.steps.toLocaleString('uk-UA');
-    this.clock.dt.textContent = formatSI(clock.dt, 'с');
+    this.clock.dt.textContent = formatDuration(clock.dt);
     this.clock.stepsPerFrame.textContent = String(clock.stepsPerFrame);
     this.clock.fps.textContent = clock.fps.toFixed(0);
 
@@ -118,7 +121,7 @@ export class StatsPanel {
       row.energy.textContent = stats.diverged ? 'розійшлося' : formatSI(stats.energy, 'Дж', 4);
       if (row.losses) row.losses.textContent = stats.diverged ? '—' : formatSI(stats.dissipated, 'Дж', 4);
       row.drift.textContent = stats.diverged ? '—' : formatPercent(stats.drift);
-      if (row.error) row.error.textContent = stats.error === null || stats.diverged ? '—' : formatSI(stats.error, 'м');
+      if (row.error) row.error.textContent = stats.error === null || stats.diverged ? '—' : formatLength(stats.error, this.unit);
     });
   }
 }

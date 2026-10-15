@@ -1,4 +1,4 @@
-import { formatSI } from '../core/units';
+import { TIME_UNITS, formatDuration, formatSI } from '../core/units';
 import { niceStep } from './grid';
 import { theme } from './theme';
 
@@ -159,7 +159,13 @@ export class TimeGraph {
     // Room for direct labels at line ends
     const direct = visible.length <= DIRECT_LABEL_LIMIT;
     const labelWidth = direct ? Math.max(...visible.map((s) => ctx.measureText(this.series[s].label).width)) + 22 : 0;
-    const left = PAD.left;
+    // Wide enough for the longest y label (log axes can have long ones).
+    let widestLabel = 0;
+    for (let k = Math.round(yLo / yStep); k <= Math.round(yHi / yStep); k++) {
+      const v = k * yStep;
+      widestLabel = Math.max(widestLabel, ctx.measureText(this.format(this.scale === 'log' ? 10 ** v : v)).width);
+    }
+    const left = Math.max(PAD.left, widestLabel + 14);
     const top = PAD.top;
     const plotW = Math.max(width - left - PAD.right - labelWidth, 10);
     const plotH = Math.max(height - top - PAD.bottom, 10);
@@ -182,12 +188,15 @@ export class TimeGraph {
       ctx.fillText(this.format(this.scale === 'log' ? 10 ** v : v), left - 8, y);
     }
 
-    // x labels (time)
-    const tStep = niceStep(tSpan / Math.max(plotW / 90, 1));
+    // x labels (time), in the largest calendar unit that fits the span twice
+    const unit = TIME_UNITS.find(([f]) => tSpan >= 2 * f);
+    const unitSeconds = unit ? unit[0] : 1;
+    const tStep = niceStep(tSpan / unitSeconds / Math.max(plotW / 90, 1)) * unitSeconds;
+    const timeLabel = (t: number) => (unit ? `${Number((t / unitSeconds).toPrecision(3))} ${unit[1]}` : formatSI(t, 'с'));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     for (let k = Math.ceil(t0 / tStep); k * tStep <= t1; k++) {
-      ctx.fillText(formatSI(k * tStep, 'с'), px(k * tStep), top + plotH + 6);
+      ctx.fillText(timeLabel(k * tStep), px(k * tStep), top + plotH + 6);
     }
 
     // Series lines, downsampled to ~2 points per pixel
@@ -297,7 +306,7 @@ export class TimeGraph {
       ctx.stroke();
     }
 
-    this.tooltipTime.textContent = `t = ${formatSI(this.times[idx], 'с', 4)}`;
+    this.tooltipTime.textContent = `t = ${formatDuration(this.times[idx], 4)}`;
     this.tooltipRows.forEach(({ row, value }, s) => {
       row.hidden = this.hidden.has(s);
       value.textContent = this.format(this.values[s][idx]);

@@ -38,6 +38,12 @@ export class FixedStepClock {
     return steps;
   }
 
+  /** Forgets simulated time still owed; used when a frame runs out of real time. */
+  dropBacklog(): void {
+    this.accumulator = 0;
+    this.lagging = true;
+  }
+
   reset(): void {
     this.accumulator = 0;
     this.lagging = false;

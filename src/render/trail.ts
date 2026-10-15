@@ -13,7 +13,12 @@ export class Trail {
     this.ys = new Float64Array(capacity);
   }
 
-  push(x: number, y: number): void {
+  /** Appends a point unless it lies within `minSpacing` of the last one. */
+  push(x: number, y: number, minSpacing = 0): void {
+    if (this.length > 0 && minSpacing > 0) {
+      const last = (this.start + this.length - 1) % this.capacity;
+      if (Math.abs(x - this.xs[last]) < minSpacing && Math.abs(y - this.ys[last]) < minSpacing) return;
+    }
     let idx: number;
     if (this.length < this.capacity) {
       idx = (this.start + this.length) % this.capacity;

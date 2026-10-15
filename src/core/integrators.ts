@@ -4,12 +4,14 @@
  */
 export type AccelFn = (pos: Float64Array, vel: Float64Array, t: number, out: Float64Array) => void;
 
-export type IntegratorId = 'euler' | 'semi-implicit-euler' | 'velocity-verlet' | 'rk4';
+export type IntegratorId = 'euler' | 'semi-implicit-euler' | 'velocity-verlet' | 'leapfrog' | 'rk4';
 
 export interface Integrator {
   readonly id: IntegratorId;
   /** Advances pos and vel in place from t to t + dt. */
   step(pos: Float64Array, vel: Float64Array, t: number, dt: number, accel: AccelFn): void;
+  /** Drops anything cached between steps; call after the state is changed from outside. */
+  reset?(): void;
 }
 
 export interface IntegratorInfo {
@@ -45,6 +47,14 @@ export const INTEGRATORS: readonly IntegratorInfo[] = [
     summary: 'Стандарт молекулярної динаміки. Точний для сталої сили, енергія стабільна.',
   },
   {
+    id: 'leapfrog',
+    name: 'Leapfrog (KDK)',
+    order: 2,
+    symplectic: true,
+    summary:
+      'Той самий Verlet, але прискорення з кінця кроку переходить у наступний: одне обчислення сил замість двох. Стандарт задачі N тіл; для сил, що залежать від швидкості, лише наближений.',
+  },
+  {
     id: 'rk4',
     name: 'Рунге–Кутта 4',
     order: 4,
@@ -66,6 +76,8 @@ export function createIntegrator(id: IntegratorId): Integrator {
       return semiImplicitEuler();
     case 'velocity-verlet':
       return velocityVerlet();
+    case 'leapfrog':
+      return leapfrog();
     case 'rk4':
       return rungeKutta4();
   }
@@ -132,6 +144,33 @@ function velocityVerlet(): Integrator {
       for (let k = 0; k < pos.length; k++) {
         vel[k] += 0.5 * (a0[k] + a1[k]) * dt;
       }
+    },
+  };
+}
+
+// Kick–drift–kick: v += a·dt/2, x += v·dt, a = a(x), v += a·dt/2. The closing
+// acceleration is reused as the next step's opening one, so each step costs
+// one force evaluation (gravity on thousands of bodies is the expensive part).
+function leapfrog(): Integrator {
+  const scratch = new Scratch();
+  let cached: Float64Array | null = null;
+  return {
+    id: 'leapfrog',
+    step(pos, vel, t, dt, accel) {
+      const [a] = scratch.get(1, pos.length);
+      if (cached !== a) {
+        accel(pos, vel, t, a);
+        cached = a;
+      }
+      for (let k = 0; k < pos.length; k++) {
+        vel[k] += 0.5 * a[k] * dt;
+        pos[k] += vel[k] * dt;
+      }
+      accel(pos, vel, t + dt, a);
+      for (let k = 0; k < pos.length; k++) vel[k] += 0.5 * a[k] * dt;
+    },
+    reset() {
+      cached = null;
     },
   };
 }

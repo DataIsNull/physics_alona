@@ -1,7 +1,8 @@
 import type { IntegratorId } from '../core/integrators';
 import type { Simulation } from '../core/simulation';
 import type { Vec2 } from '../core/vec2';
-import type { Bounds } from '../render/camera';
+import type { LengthUnit } from '../core/units';
+import type { Bounds, Camera } from '../render/camera';
 import type { AxisScale, SeriesSpec } from '../render/graph';
 
 /** What the graph under the canvas plots, sampled from the scene's simulations. */
@@ -34,6 +35,17 @@ export interface Scene<S extends Simulation = Simulation> {
   integratorNote?: string;
   /** Restart automatically after this much simulated time, s. */
   loopAfter?: number;
+  /** Display unit for lengths (grid, cursor, errors); metres by default. */
+  lengthUnit?: LengthUnit;
+  /** Range of the physics-step slider, s. */
+  dtRange?: readonly [number, number];
+  /** Starting time scale (simulated seconds per real second) and its slider range. */
+  speed?: number;
+  speedRange?: readonly [number, number];
+  /** Integrator selected when the scene loads (velocity Verlet otherwise). */
+  integrator?: IntegratorId;
+  /** Extra drawing under the bodies, e.g. Kepler's equal-area sectors. */
+  overlay?(ctx: CanvasRenderingContext2D, camera: Camera, worlds: readonly S[]): void;
   /**
    * Energy leaves without being booked as losses (rigid-body impacts,
    * damping), so it only shows as a drop in E.

@@ -5,8 +5,9 @@ export interface Bounds {
   max: Vec2;
 }
 
-const MIN_SCALE = 1e-12;
-const MAX_SCALE = 1e12;
+/** Pixels per metre: from galaxies (~10⁻¹⁹) to atoms (~10¹²) and beyond. */
+const MIN_SCALE = 1e-30;
+const MAX_SCALE = 1e30;
 
 /** Maps world space (metres, y up) to screen space (CSS pixels, y down). */
 export class Camera {

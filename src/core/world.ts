@@ -23,6 +23,11 @@ export interface WorldOptions {
   /** Shown in stats and graph legends. Defaults to the integrator name. */
   label?: string;
   color?: string;
+  /**
+   * Largest step the dynamics tolerates right now. Longer steps are split
+   * into equal sub-steps (adaptive time stepping for close encounters).
+   */
+  maxStep?: (world: World) => number;
 }
 
 /** A particle pulled towards a point by the user's pointer. */
@@ -33,6 +38,8 @@ export interface Grab {
 
 /** Natural frequency of the critically damped spring that drags grabbed particles, rad/s. */
 export const GRAB_OMEGA = 2 * Math.PI * 3;
+/** Guard against runaway subdivision in adaptive stepping. */
+const MAX_SUBSTEPS = 1000;
 /** Extra pick tolerance around particles, screen pixels. */
 const PICK_SLACK_PX = 8;
 /** Smallest drawn particle radius, screen pixels; picking matches it. */
@@ -69,6 +76,11 @@ export class World implements Simulation {
   private readonly initialVel: Float64Array;
   private readonly fixedIndices: number[] = [];
   private readonly dissipativeForces: Force[];
+  private readonly maxStep: ((world: World) => number) | null;
+  /** Grab spring frequency for the current step: stiff, but never stiffer than the step can follow. */
+  private grabOmega = GRAB_OMEGA;
+  /** Sub-steps taken in the last step (1 without adaptive stepping). */
+  lastSubsteps = 1;
 
   constructor(options: WorldOptions) {
     this.particles = new Particles(options.particles);
@@ -82,6 +94,7 @@ export class World implements Simulation {
     this.color = options.color ?? '#e2e8f0';
     for (let i = 0; i < this.particles.count; i++) if (this.particles.isFixed(i)) this.fixedIndices.push(i);
     this.dissipativeForces = this.forces.filter((f) => f.power);
+    this.maxStep = options.maxStep ?? null;
     this.dissipative = this.dissipativeForces.length > 0 || this.collisions !== null || this.constraintLosses;
     this.initialPos = this.particles.pos.slice();
     this.initialVel = this.particles.vel.slice();
@@ -99,8 +112,9 @@ export class World implements Simulation {
     const grab = this.grab;
     if (grab) {
       const i = grab.particle;
-      out[2 * i] += GRAB_OMEGA ** 2 * (grab.target.x - pos[2 * i]) - 2 * GRAB_OMEGA * vel[2 * i];
-      out[2 * i + 1] += GRAB_OMEGA ** 2 * (grab.target.y - pos[2 * i + 1]) - 2 * GRAB_OMEGA * vel[2 * i + 1];
+      const w = this.grabOmega;
+      out[2 * i] += w * w * (grab.target.x - pos[2 * i]) - 2 * w * vel[2 * i];
+      out[2 * i + 1] += w * w * (grab.target.y - pos[2 * i + 1]) - 2 * w * vel[2 * i + 1];
     }
     for (const i of this.fixedIndices) {
       out[2 * i] = 0;
@@ -110,7 +124,19 @@ export class World implements Simulation {
 
   step(dt: number): void {
     if (this.diverged) return;
+    let n = 1;
+    if (this.maxStep) {
+      const limit = this.maxStep(this);
+      n = Number.isFinite(limit) && limit > 0 ? Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(dt / limit))) : 1;
+    }
+    this.lastSubsteps = n;
+    for (let k = 0; k < n && !this.diverged; k++) this.advance(dt / n);
+  }
+
+  private advance(dt: number): void {
     const { pos, vel } = this.particles;
+    // Seconds-per-step scenes and days-per-step orbits both get a usable grab.
+    this.grabOmega = Math.min(GRAB_OMEGA, 0.5 / dt);
 
     // While the user drags, energy they put in is booked as external work,
     // so impulsive losses (collisions, rod jerks) are not tracked separately.
@@ -118,11 +144,13 @@ export class World implements Simulation {
     const balanceBefore = grab ? this.totalEnergy() + this.dissipated : 0;
     if (grab && this.particles.isFixed(grab.particle)) {
       // A grabbed fixed particle (pivot, pin) glides towards the pointer rather than teleporting.
-      const k = Math.min(1, GRAB_OMEGA * dt);
+      const k = Math.min(1, this.grabOmega * dt);
       const i = grab.particle;
       this.moveFixed(i, new Vec2(pos[2 * i] + (grab.target.x - pos[2 * i]) * k, pos[2 * i + 1] + (grab.target.y - pos[2 * i + 1]) * k));
     }
 
+    // The grab force and a moved pin change accelerations behind the integrator's back.
+    if (grab) this.integrator.reset?.();
     const powerBefore = this.dissipativePower();
     const constrained = this.constraints.length > 0;
     if (constrained) this.constraintSolver.begin(pos);
@@ -158,6 +186,7 @@ export class World implements Simulation {
   reset(): void {
     this.particles.pos.set(this.initialPos);
     this.particles.vel.set(this.initialVel);
+    this.integrator.reset?.();
     this.t = 0;
     this.steps = 0;
     this.dissipated = 0;
