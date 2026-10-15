@@ -9,6 +9,8 @@ export const theme = {
   inkMuted: '#898781',
   grid: '#262624',
   axis: '#45453f',
+  /** Solid side of a wall. */
+  wall: 'rgba(69, 69, 63, 0.35)',
   spring: '#898781',
   anchor: '#c3c2b7',
   ghost: 'rgba(255, 255, 255, 0.55)',

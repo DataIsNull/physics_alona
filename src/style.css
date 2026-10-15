@@ -206,7 +206,12 @@ input:focus-visible {
   cursor: grab;
 }
 
-#sim.dragging {
+#sim.can-grab {
+  cursor: pointer;
+}
+
+#sim.dragging,
+#sim.grabbing {
   cursor: grabbing;
 }
 

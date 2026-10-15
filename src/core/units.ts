@@ -6,6 +6,9 @@ export const G = 6.674_30e-11;
 /** Standard gravity at Earth's surface, m/s². */
 export const STANDARD_GRAVITY = 9.806_65;
 
+/** Density of air at sea level and 15 °C, kg/m³. */
+export const AIR_DENSITY = 1.225;
+
 /** Degrees → radians. */
 export const DEG = Math.PI / 180;
 

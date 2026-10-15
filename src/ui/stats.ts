@@ -2,6 +2,8 @@ import { formatPercent, formatSI } from '../core/units';
 
 export interface WorldStats {
   energy: number;
+  /** Energy turned into heat so far, J. */
+  dissipated: number;
   drift: number;
   /** Largest distance from the exact solution, m; null without one. */
   error: number | null;
@@ -18,6 +20,7 @@ export interface ClockStats {
 
 interface WorldRow {
   energy: HTMLElement;
+  losses: HTMLElement | null;
   drift: HTMLElement;
   error: HTMLElement | null;
   card: HTMLElement;
@@ -30,7 +33,10 @@ export class StatsPanel {
 
   constructor(private readonly root: HTMLElement) {}
 
-  configure(worlds: ReadonlyArray<{ label: string; color: string }>, hasAnalytic: boolean): void {
+  configure(
+    worlds: ReadonlyArray<{ label: string; color: string; dissipative: boolean }>,
+    hasAnalytic: boolean,
+  ): void {
     this.root.replaceChildren();
 
     const clockBlock = block('Час');
@@ -45,7 +51,7 @@ export class StatsPanel {
     clockBlock.append(clockList);
 
     const worldBlock = block('Енергія і точність');
-    this.rows = worlds.map(({ label, color }) => {
+    this.rows = worlds.map(({ label, color, dissipative }) => {
       const card = el('div', 'world-card');
       const head = el('div', 'world-head');
       const key = el('span', 'line-key');
@@ -59,13 +65,19 @@ export class StatsPanel {
       return {
         card,
         energy: pair(list, 'Повна енергія E'),
-        drift: pair(list, 'Зміна ΔE/E₀'),
+        losses: dissipative ? pair(list, 'Втрати (тепло)') : null,
+        drift: pair(list, dissipative ? 'Похибка балансу' : 'Зміна ΔE/E₀'),
         error: hasAnalytic ? pair(list, 'Похибка положення') : null,
       };
     });
     if (hasAnalytic) {
       const note = el('p', 'note');
-      note.textContent = 'Похибка — найбільша відстань тіла від точного розв’язку.';
+      note.textContent = 'Похибка положення — найбільша відстань тіла від точного розв’язку.';
+      worldBlock.append(note);
+    }
+    if (worlds.some((w) => w.dissipative)) {
+      const note = el('p', 'note');
+      note.textContent = 'Похибка балансу — (E + втрати − робота мишею − E₀)/E₀: для точної фізики нуль.';
       worldBlock.append(note);
     }
 
@@ -76,7 +88,8 @@ export class StatsPanel {
       ['. або →', 'один крок'],
       ['R', 'скинути'],
       ['F або подвійний клік', 'показати все'],
-      ['Перетягування', 'рух камери'],
+      ['Тягни тіло', 'схопити й перенести'],
+      ['Тягни порожнє місце', 'рух камери'],
       ['Колесо / щипок', 'масштаб'],
     ]) {
       const item = el('li');
@@ -103,6 +116,7 @@ export class StatsPanel {
       if (!row) return;
       row.card.classList.toggle('diverged', stats.diverged);
       row.energy.textContent = stats.diverged ? 'розійшлося' : formatSI(stats.energy, 'Дж', 4);
+      if (row.losses) row.losses.textContent = stats.diverged ? '—' : formatSI(stats.dissipated, 'Дж', 4);
       row.drift.textContent = stats.diverged ? '—' : formatPercent(stats.drift);
       if (row.error) row.error.textContent = stats.error === null || stats.diverged ? '—' : formatSI(stats.error, 'м');
     });

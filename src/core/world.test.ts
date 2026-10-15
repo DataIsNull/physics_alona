@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DistanceConstraint } from './constraints';
 import { Spring, UniformGravity } from './forces';
 import { INTEGRATORS } from './integrators';
 import { Vec2 } from './vec2';
@@ -55,6 +56,33 @@ describe('World', () => {
     for (let i = 0; i < 1000; i++) world.step(1);
     expect(world.diverged).toBe(true);
     expect(world.steps).toBeLessThan(1000);
+  });
+
+  it('books work done by dragging so the energy balance still holds', () => {
+    const world = new World({
+      integrator: 'velocity-verlet',
+      forces: [new UniformGravity()],
+      constraints: [new DistanceConstraint(0, 1, 1)],
+      particles: [{ pos: Vec2.ZERO, fixed: true }, { pos: new Vec2(0, -1) }],
+    });
+    // Lift the bob to the side, then let go and watch it swing.
+    world.grab = { particle: 1, target: new Vec2(1, 0) };
+    for (let i = 0; i < 240; i++) world.step(1 / 240);
+    world.grab = null;
+    for (let i = 0; i < 480; i++) world.step(1 / 240);
+    expect(world.externalWork).toBeGreaterThan(5); // ≈ m·g·Δh plus some swing
+    expect(Math.abs(world.energyDrift())).toBeLessThan(1e-3);
+  });
+
+  it('glides a grabbed fixed particle towards the pointer', () => {
+    const world = new World({ integrator: 'euler', particles: [{ pos: Vec2.ZERO, fixed: true }] });
+    world.grab = { particle: 0, target: new Vec2(1, 0) };
+    world.step(1 / 240);
+    const x = world.particles.position(0).x;
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(0.2);
+    for (let i = 0; i < 240; i++) world.step(1 / 240);
+    expect(world.particles.position(0).x).toBeCloseTo(1, 6);
   });
 
   it('rejects non-positive mass', () => {

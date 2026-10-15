@@ -3,6 +3,7 @@ import { INTEGRATORS } from '../core/integrators';
 import { Vec2 } from '../core/vec2';
 import { World } from '../core/world';
 import { theme } from '../render/theme';
+import { driftGraph } from './graphs';
 import type { Scene } from './types';
 
 // Zero-length spring to a fixed centre: an isotropic 2D oscillator whose
@@ -18,12 +19,13 @@ const center = (i: number) => new Vec2((i - (INTEGRATORS.length - 1) / 2) * SPAC
 
 export const integratorCompare: Scene = {
   id: 'integrator-compare',
+  stage: 0,
   title: 'Порівняння інтеграторів',
   description:
     'Чотири однакові осцилятори, кожен зі своїм методом інтегрування. Точна траєкторія — замкнений еліпс. Явний Ейлер розкручується назовні, симплектичні методи тримають орбіту. На графіку — відносна зміна повної енергії; клацни ряд у легенді, щоб сховати його.',
   dt: 1 / 60,
   view: { min: new Vec2(-10, -2.6), max: new Vec2(10, 2.6) },
-  graph: 'drift',
+  graph: driftGraph,
   fixedIntegrators: true,
   loopAfter: 12,
   build: () =>

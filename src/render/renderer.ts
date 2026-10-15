@@ -1,3 +1,4 @@
+import type { Wall } from '../core/collisions';
 import { Spring, type SpringEnd } from '../core/forces';
 import type { Vec2 } from '../core/vec2';
 import type { World } from '../core/world';
@@ -12,14 +13,14 @@ export interface RenderLayers {
   analytic: boolean;
 }
 
-/** A world plus per-particle render state. */
+/** A world plus per-particle render state; null where a particle keeps no trail. */
 export interface WorldView {
   world: World;
-  trails: Trail[];
+  trails: (Trail | null)[];
 }
 
-/** Exact solution: position of `particle` in world `world` at time t. */
-export type AnalyticFn = (world: number, particle: number, t: number) => Vec2;
+/** Exact solution: position of `particle` in world `world` at time t, if known. */
+export type AnalyticFn = (world: number, particle: number, t: number) => Vec2 | null;
 
 /** Velocity arrows show the displacement over this much time, s. */
 const VELOCITY_ARROW_TIME = 0.25;
@@ -58,10 +59,16 @@ export class Renderer {
     ctx.fillRect(0, 0, camera.width, camera.height);
     drawGrid(ctx, camera);
 
-    for (const { world } of views) this.drawSprings(world);
+    for (const { world } of views) {
+      for (const w of world.collisions?.walls ?? []) this.drawWall(w);
+    }
+    for (const { world } of views) {
+      this.drawSprings(world);
+      this.drawRods(world);
+    }
     if (layers.trails) {
       for (const view of views) {
-        view.trails.forEach((trail, i) => this.drawTrail(trail, view.world.particles.color[i]));
+        view.trails.forEach((trail, i) => trail && this.drawTrail(trail, view.world.particles.color[i]));
       }
     }
     if (layers.analytic && analytic) {
@@ -69,6 +76,45 @@ export class Renderer {
     }
     for (const { world } of views) this.drawParticles(world);
     if (layers.velocities) for (const { world } of views) this.drawVelocities(world);
+    for (const { world } of views) this.drawGrab(world);
+  }
+
+  /** Shades the solid side of a wall and draws its surface line. */
+  private drawWall(wall: Wall): void {
+    const { ctx, camera } = this;
+    const { min, max } = camera.visibleBounds();
+    // Long enough to cross the whole view from the wall's anchor point.
+    const reach =
+      Math.hypot(max.x - min.x, max.y - min.y) +
+      Math.hypot(wall.point.x - (min.x + max.x) / 2, wall.point.y - (min.y + max.y) / 2);
+    const tx = -wall.normal.y * reach;
+    const ty = wall.normal.x * reach;
+    const nx = -wall.normal.x * reach;
+    const ny = -wall.normal.y * reach;
+    const p = wall.point;
+    const corners: Array<[number, number]> = [
+      [p.x - tx, p.y - ty],
+      [p.x + tx, p.y + ty],
+      [p.x + tx + nx, p.y + ty + ny],
+      [p.x - tx + nx, p.y - ty + ny],
+    ];
+    ctx.beginPath();
+    corners.forEach(([x, y], k) => {
+      const sx = camera.toScreenX(x);
+      const sy = camera.toScreenY(y);
+      if (k === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    });
+    ctx.closePath();
+    ctx.fillStyle = theme.wall;
+    ctx.fill();
+
+    ctx.strokeStyle = theme.axis;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(camera.toScreenX(p.x - tx), camera.toScreenY(p.y - ty));
+    ctx.lineTo(camera.toScreenX(p.x + tx), camera.toScreenY(p.y + ty));
+    ctx.stroke();
   }
 
   private drawSprings(world: World): void {
@@ -86,6 +132,21 @@ export class Renderer {
         if (typeof end !== 'number') drawAnchor(ctx, endX(end), endY(end));
       }
     }
+  }
+
+  private drawRods(world: World): void {
+    if (world.constraints.length === 0) return;
+    const { ctx, camera } = this;
+    const pos = world.particles.pos;
+    // Many rods (cloth) read better thin; a few (pendulums) read better bold.
+    ctx.lineWidth = world.constraints.length > 20 ? 1 : 2;
+    ctx.strokeStyle = theme.spring;
+    ctx.beginPath();
+    for (const c of world.constraints) {
+      ctx.moveTo(camera.toScreenX(pos[2 * c.a]), camera.toScreenY(pos[2 * c.a + 1]));
+      ctx.lineTo(camera.toScreenX(pos[2 * c.b]), camera.toScreenY(pos[2 * c.b + 1]));
+    }
+    ctx.stroke();
   }
 
   private drawTrail(trail: Trail, color: string): void {
@@ -111,13 +172,15 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  private drawGhosts(world: World, exact: (particle: number) => Vec2): void {
+  private drawGhosts(world: World, exact: (particle: number) => Vec2 | null): void {
     const { ctx, camera } = this;
     ctx.strokeStyle = theme.ghost;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([3, 3]);
     for (let i = 0; i < world.particles.count; i++) {
+      if (world.particles.isFixed(i)) continue;
       const p = exact(i);
+      if (!p) continue;
       const r = Math.max(world.particles.radius[i] * camera.scale, MIN_PARTICLE_PX) + 2;
       ctx.beginPath();
       ctx.arc(camera.toScreenX(p.x), camera.toScreenY(p.y), r, 0, 2 * Math.PI);
@@ -130,10 +193,18 @@ export class Renderer {
     const { ctx, camera } = this;
     const { count, pos, radius, color } = world.particles;
     for (let i = 0; i < count; i++) {
+      const x = camera.toScreenX(pos[2 * i]);
+      const y = camera.toScreenY(pos[2 * i + 1]);
+      const fixed = world.particles.isFixed(i);
+      if (radius[i] === 0) {
+        // Point masses (cloth nodes) are drawn through their rods; only anchors show.
+        if (fixed) drawAnchor(ctx, x, y);
+        continue;
+      }
       const r = Math.max(radius[i] * camera.scale, MIN_PARTICLE_PX);
       ctx.beginPath();
-      ctx.arc(camera.toScreenX(pos[2 * i]), camera.toScreenY(pos[2 * i + 1]), r, 0, 2 * Math.PI);
-      ctx.fillStyle = color[i];
+      ctx.arc(x, y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = fixed ? theme.anchor : color[i];
       ctx.fill();
       // 2px surface ring keeps overlapping particles distinct
       ctx.strokeStyle = theme.surface;
@@ -149,12 +220,33 @@ export class Renderer {
     ctx.fillStyle = theme.velocity;
     ctx.lineWidth = 1.5;
     for (let i = 0; i < count; i++) {
+      if (world.particles.isFixed(i)) continue;
       const x0 = camera.toScreenX(pos[2 * i]);
       const y0 = camera.toScreenY(pos[2 * i + 1]);
       const x1 = camera.toScreenX(pos[2 * i] + vel[2 * i] * VELOCITY_ARROW_TIME);
       const y1 = camera.toScreenY(pos[2 * i + 1] + vel[2 * i + 1] * VELOCITY_ARROW_TIME);
       drawArrow(ctx, x0, y0, x1, y1);
     }
+  }
+
+  /** Dashed tether from a grabbed particle to the pointer. */
+  private drawGrab(world: World): void {
+    if (!world.grab) return;
+    const { ctx, camera } = this;
+    const i = world.grab.particle;
+    const tx = camera.toScreenX(world.grab.target.x);
+    const ty = camera.toScreenY(world.grab.target.y);
+    ctx.strokeStyle = theme.ink;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(camera.toScreenX(world.particles.pos[2 * i]), camera.toScreenY(world.particles.pos[2 * i + 1]));
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(tx, ty, 4, 0, 2 * Math.PI);
+    ctx.stroke();
   }
 }
 
@@ -208,4 +300,9 @@ function drawArrow(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: nu
   ctx.lineTo(x1 - ux * head + uy * head * 0.5, y1 - uy * head - ux * head * 0.5);
   ctx.closePath();
   ctx.fill();
+}
+
+/** Screen-space hit radius for picking a particle with the pointer, px. */
+export function pickRadius(world: World, i: number, scale: number): number {
+  return Math.max(world.particles.radius[i] * scale, MIN_PARTICLE_PX) + 8;
 }

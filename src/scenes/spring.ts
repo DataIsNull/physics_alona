@@ -2,6 +2,7 @@ import { Spring } from '../core/forces';
 import { Vec2 } from '../core/vec2';
 import { World } from '../core/world';
 import { theme } from '../render/theme';
+import { energyGraph } from './graphs';
 import type { Scene } from './types';
 
 const MASS = 1; // kg
@@ -13,12 +14,13 @@ const ANCHOR = new Vec2(-REST_LENGTH, 0);
 
 export const springOscillator: Scene = {
   id: 'spring',
+  stage: 0,
   title: 'Пружинний маятник',
   description:
     'Тягарець 1 кг на пружині k = 4π² Н/м без тертя, період рівно 1 с. Кінетична й потенціальна енергія перетікають одна в одну, а повна має лишатися сталою. Спробуй явний Ейлер і великий крок dt.',
   dt: 1 / 60,
   view: { min: new Vec2(-3.4, -1.2), max: new Vec2(1.6, 1.2) },
-  graph: 'energy',
+  graph: energyGraph(),
   build: (integrator) => [
     new World({
       integrator,

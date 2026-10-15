@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { SCENES } from '.';
+
+describe.each(SCENES.map((s) => [s.id, s] as const))('scene %s', (_id, scene) => {
+  it('builds, runs 3 s without diverging and samples its graph', () => {
+    const worlds = scene.build('velocity-verlet');
+    const graph = scene.graph(worlds);
+    const steps = Math.round(3 / scene.dt);
+    for (let s = 0; s < steps; s++) for (const w of worlds) w.step(scene.dt);
+    for (const w of worlds) expect(w.diverged).toBe(false);
+    const sample = graph.sample(worlds);
+    expect(sample).toHaveLength(graph.series.length);
+    for (const v of sample) expect(Number.isNaN(v)).toBe(false);
+  });
+
+  it('keeps its energy books balanced', () => {
+    const worlds = scene.build('velocity-verlet');
+    const steps = Math.round(3 / scene.dt);
+    for (let s = 0; s < steps; s++) for (const w of worlds) w.step(scene.dt);
+    for (const w of worlds) {
+      if (w.label === 'Явний Ейлер') continue; // unstable by design
+      expect(Math.abs(w.energyDrift())).toBeLessThan(0.01);
+    }
+  });
+});

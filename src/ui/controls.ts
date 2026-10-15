@@ -2,6 +2,7 @@ import { INTEGRATORS, type IntegratorId, integratorInfo } from '../core/integrat
 import { formatSI } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import type { RenderLayers } from '../render/renderer';
+import { STAGES } from '../scenes';
 import type { Scene } from '../scenes/types';
 import { byId, noFocusOnClick } from './dom';
 
@@ -66,7 +67,17 @@ export class Controls {
     scenes: readonly Scene[],
     private readonly on: ControlHandlers,
   ) {
-    for (const scene of scenes) this.sceneSelect.add(new Option(scene.title, scene.id));
+    const groups = new Map<number, HTMLOptGroupElement>();
+    for (const scene of scenes) {
+      let group = groups.get(scene.stage);
+      if (!group) {
+        group = document.createElement('optgroup');
+        group.label = STAGES[scene.stage] ?? `Етап ${scene.stage}`;
+        groups.set(scene.stage, group);
+        this.sceneSelect.append(group);
+      }
+      group.append(new Option(scene.title, scene.id));
+    }
     for (const info of INTEGRATORS) this.integratorSelect.add(new Option(`${info.name} (порядок ${info.order})`, info.id));
 
     this.sceneSelect.addEventListener('change', () => on.scene(this.sceneSelect.value));

@@ -1,13 +1,13 @@
 import { FixedStepClock } from './core/clock';
 import type { IntegratorId } from './core/integrators';
-import { formatPercent, formatSI } from './core/units';
+import type { Vec2 } from './core/vec2';
+import type { World } from './core/world';
 import { Camera } from './render/camera';
 import { TimeGraph } from './render/graph';
-import { type RenderLayers, Renderer, type WorldView } from './render/renderer';
-import { theme } from './render/theme';
+import { type RenderLayers, Renderer, type WorldView, pickRadius } from './render/renderer';
 import { Trail } from './render/trail';
 import { SCENES } from './scenes';
-import type { Scene } from './scenes/types';
+import type { GraphSpec, Scene } from './scenes/types';
 import { Controls } from './ui/controls';
 import { byId } from './ui/dom';
 import { attachCameraInput } from './ui/input';
@@ -29,7 +29,10 @@ export class App {
   private readonly controls: Controls;
 
   private scene!: Scene;
+  private graphSpec!: GraphSpec;
   private views: WorldView[] = [];
+  /** World whose particle the pointer is dragging. */
+  private grabbed: World | null = null;
   private integrator: IntegratorId = 'velocity-verlet';
   private layers: RenderLayers;
 
@@ -62,9 +65,16 @@ export class App {
       layers: (layers) => (this.layers = layers),
     });
     this.layers = this.controls.layers;
-    attachCameraInput(byId('sim'), this.camera, {
-      onCursor: (p) => this.controls.showCursor(p),
+    const canvas = byId<HTMLCanvasElement>('sim');
+    attachCameraInput(canvas, this.camera, {
+      onCursor: (p, sx, sy) => {
+        this.controls.showCursor(p);
+        canvas.classList.toggle('can-grab', p !== null && this.pick(sx, sy) !== null);
+      },
       onFit: () => this.fit(),
+      onGrabStart: (sx, sy) => this.grabAt(sx, sy),
+      onGrabMove: (p) => this.dragTo(p),
+      onGrabEnd: () => this.release(),
     });
 
     this.loadScene(location.hash.slice(1) || SCENES[0].id);
@@ -96,30 +106,18 @@ export class App {
   }
 
   private buildWorlds(): void {
+    this.grabbed = null;
     this.views = this.scene.build(this.integrator).map((world) => ({
       world,
-      trails: Array.from({ length: world.particles.count }, () => new Trail()),
+      trails: world.particles.trail.map((keep) => (keep ? new Trail() : null)),
     }));
 
-    if (this.scene.graph === 'energy') {
-      byId('graph-title').textContent = 'Енергія';
-      this.graph.configure(
-        [
-          { label: 'Кінетична', color: theme.series[0] },
-          { label: 'Потенціальна', color: theme.series[1] },
-          { label: 'Повна', color: theme.series[2] },
-        ],
-        (v) => formatSI(v, 'Дж'),
-      );
-    } else {
-      byId('graph-title').textContent = 'Зміна повної енергії ΔE/E₀';
-      this.graph.configure(
-        this.views.map(({ world }) => ({ label: world.label, color: world.color })),
-        formatPercent,
-      );
-    }
+    const worlds = this.views.map((v) => v.world);
+    this.graphSpec = this.scene.graph(worlds);
+    byId('graph-title').textContent = this.graphSpec.title;
+    this.graph.configure(this.graphSpec.series, this.graphSpec.format, this.graphSpec.scale);
     this.stats.configure(
-      this.views.map(({ world }) => ({ label: world.label, color: world.color })),
+      worlds.map((w) => ({ label: w.label, color: w.color, dissipative: w.dissipative })),
       !!this.scene.analytic,
     );
     this.restart();
@@ -135,7 +133,7 @@ export class App {
     this.time = 0;
     this.stepCount = 0;
     this.clock.reset();
-    for (const view of this.views) for (const trail of view.trails) trail.clear();
+    for (const view of this.views) for (const trail of view.trails) trail?.clear();
     this.graph.clear();
     this.nextTrailSample = 0;
     this.nextGraphSample = 0;
@@ -175,24 +173,54 @@ export class App {
       for (const { world, trails } of this.views) {
         if (world.diverged) continue;
         const pos = world.particles.pos;
-        trails.forEach((trail, i) => trail.push(pos[2 * i], pos[2 * i + 1]));
+        trails.forEach((trail, i) => trail?.push(pos[2 * i], pos[2 * i + 1]));
       }
       this.nextTrailSample = this.time + TRAIL_INTERVAL;
     }
     if (this.time >= this.nextGraphSample - eps) {
-      this.graph.push(this.time, this.graphValues());
+      this.graph.push(
+        this.time,
+        this.graphSpec.sample(this.views.map((v) => v.world)),
+      );
       this.nextGraphSample = this.time + GRAPH_INTERVAL;
     }
   }
 
-  private graphValues(): number[] {
-    if (this.scene.graph === 'energy') {
-      const world = this.views[0].world;
-      const kinetic = world.kineticEnergy();
-      const potential = world.potentialEnergy();
-      return [kinetic, potential, kinetic + potential];
+  /** Nearest particle under a screen point, within its pick radius. */
+  private pick(sx: number, sy: number): { world: World; particle: number } | null {
+    let best: { world: World; particle: number } | null = null;
+    let bestDistance = Infinity;
+    for (const { world } of this.views) {
+      if (world.diverged) continue;
+      const { pos, count } = world.particles;
+      for (let i = 0; i < count; i++) {
+        const d = Math.hypot(this.camera.toScreenX(pos[2 * i]) - sx, this.camera.toScreenY(pos[2 * i + 1]) - sy);
+        if (d <= pickRadius(world, i, this.camera.scale) && d < bestDistance) {
+          best = { world, particle: i };
+          bestDistance = d;
+        }
+      }
     }
-    return this.views.map(({ world }) => (world.diverged ? NaN : world.energyDrift()));
+    return best;
+  }
+
+  private grabAt(sx: number, sy: number): boolean {
+    const hit = this.pick(sx, sy);
+    if (!hit) return false;
+    hit.world.grab = { particle: hit.particle, target: this.camera.toWorld(sx, sy) };
+    this.grabbed = hit.world;
+    return true;
+  }
+
+  private dragTo(p: Vec2): void {
+    const grab = this.grabbed?.grab;
+    if (!grab) return;
+    grab.target = p;
+  }
+
+  private release(): void {
+    if (this.grabbed) this.grabbed.grab = null;
+    this.grabbed = null;
   }
 
   private worldStats(): WorldStats[] {
@@ -200,12 +228,18 @@ export class App {
     return this.views.map(({ world }, w) => {
       let error: number | null = null;
       if (analytic) {
-        error = 0;
         for (let i = 0; i < world.particles.count; i++) {
-          error = Math.max(error, world.particles.position(i).distanceTo(analytic(w, i, world.t)));
+          const exact = analytic(w, i, world.t);
+          if (exact) error = Math.max(error ?? 0, world.particles.position(i).distanceTo(exact));
         }
       }
-      return { energy: world.totalEnergy(), drift: world.energyDrift(), error, diverged: world.diverged };
+      return {
+        energy: world.totalEnergy(),
+        dissipated: world.dissipated,
+        drift: world.energyDrift(),
+        error,
+        diverged: world.diverged,
+      };
     });
   }
 

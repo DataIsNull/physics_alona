@@ -7,6 +7,8 @@ export interface SeriesSpec {
   color: string;
 }
 
+export type AxisScale = 'linear' | 'log';
+
 const CAPACITY = 3000;
 const PAD = { top: 12, bottom: 22, left: 64, right: 12 };
 const DIRECT_LABEL_LIMIT = 4;
@@ -30,6 +32,7 @@ export class TimeGraph {
   private start = 0;
   private length = 0;
   private format: (v: number) => string = String;
+  private scale: AxisScale = 'linear';
   private hoverX: number | null = null;
   private legendValues: HTMLElement[] = [];
   private tooltipTime!: HTMLElement;
@@ -49,9 +52,10 @@ export class TimeGraph {
     });
   }
 
-  configure(series: SeriesSpec[], format: (v: number) => string): void {
+  configure(series: SeriesSpec[], format: (v: number) => string, scale: AxisScale = 'linear'): void {
     this.series = series;
     this.format = format;
+    this.scale = scale;
     this.hidden.clear();
     this.values = series.map(() => new Float64Array(CAPACITY));
     this.clear();
@@ -121,7 +125,7 @@ export class TimeGraph {
     for (const s of visible) {
       const vals = this.values[s];
       for (let i = 0; i < this.length; i++) {
-        const v = vals[this.index(i)];
+        const v = this.toAxis(vals[this.index(i)]);
         if (!Number.isFinite(v)) continue;
         if (v < yMin) yMin = v;
         if (v > yMax) yMax = v;
@@ -131,14 +135,26 @@ export class TimeGraph {
       yMin = 0;
       yMax = 1;
     }
-    if (yMax - yMin < Math.max(Math.abs(yMax), Math.abs(yMin)) * 1e-9 || yMax === yMin) {
-      const pad = Math.max(Math.abs(yMax) * 0.05, 1e-12);
-      yMin -= pad;
-      yMax += pad;
+    let yStep: number;
+    let yLo: number;
+    let yHi: number;
+    if (this.scale === 'log') {
+      // Axis values are decades; tick on whole powers of ten.
+      yLo = Math.floor(yMin);
+      yHi = Math.max(Math.ceil(yMax), yLo + 1);
+      yStep = Math.max(1, Math.ceil((yHi - yLo) / 5));
+      yLo = Math.floor(yLo / yStep) * yStep;
+      yHi = Math.ceil(yHi / yStep) * yStep;
+    } else {
+      if (yMax - yMin < Math.max(Math.abs(yMax), Math.abs(yMin)) * 1e-9 || yMax === yMin) {
+        const pad = Math.max(Math.abs(yMax) * 0.05, 1e-12);
+        yMin -= pad;
+        yMax += pad;
+      }
+      yStep = niceStep((yMax - yMin) / 4);
+      yLo = Math.floor(yMin / yStep) * yStep;
+      yHi = Math.ceil(yMax / yStep) * yStep;
     }
-    const yStep = niceStep((yMax - yMin) / 4);
-    const yLo = Math.floor(yMin / yStep) * yStep;
-    const yHi = Math.ceil(yMax / yStep) * yStep;
 
     // Room for direct labels at line ends
     const direct = visible.length <= DIRECT_LABEL_LIMIT;
@@ -157,13 +173,13 @@ export class TimeGraph {
     for (let k = Math.round(yLo / yStep); k <= Math.round(yHi / yStep); k++) {
       const v = k * yStep;
       const y = Math.round(py(v)) + 0.5;
-      ctx.strokeStyle = k === 0 ? theme.axis : theme.grid;
+      ctx.strokeStyle = k === 0 && this.scale === 'linear' ? theme.axis : theme.grid;
       ctx.beginPath();
       ctx.moveTo(left, y);
       ctx.lineTo(left + plotW, y);
       ctx.stroke();
       ctx.fillStyle = theme.inkMuted;
-      ctx.fillText(this.format(v), left - 8, y);
+      ctx.fillText(this.format(this.scale === 'log' ? 10 ** v : v), left - 8, y);
     }
 
     // x labels (time)
@@ -185,7 +201,7 @@ export class TimeGraph {
       let pen = false;
       for (let i = 0; i < this.length; i += stride) {
         const idx = this.index(i);
-        const v = vals[idx];
+        const v = this.toAxis(vals[idx]);
         if (!Number.isFinite(v)) {
           pen = false;
           continue;
@@ -197,7 +213,8 @@ export class TimeGraph {
         pen = true;
       }
       const lastIdx = this.index(this.length - 1);
-      if (pen && Number.isFinite(vals[lastIdx])) ctx.lineTo(px(this.times[lastIdx]), py(vals[lastIdx]));
+      const lastV = this.toAxis(vals[lastIdx]);
+      if (pen && Number.isFinite(lastV)) ctx.lineTo(px(this.times[lastIdx]), py(lastV));
       ctx.stroke();
     }
 
@@ -215,7 +232,10 @@ export class TimeGraph {
     const { ctx } = this;
     const last = this.index(this.length - 1);
     const labels = visible
-      .map((s) => ({ s, y: Number.isFinite(this.values[s][last]) ? py(this.values[s][last]) : top + plotH }))
+      .map((s) => {
+        const v = this.toAxis(this.values[s][last]);
+        return { s, y: Number.isFinite(v) ? py(v) : top + plotH };
+      })
       .sort((a, b) => a.y - b.y);
     // Push labels apart so they never overlap, then keep them inside the plot.
     const gap = 13;
@@ -266,7 +286,7 @@ export class TimeGraph {
     ctx.stroke();
 
     for (const s of visible) {
-      const v = this.values[s][idx];
+      const v = this.toAxis(this.values[s][idx]);
       if (!Number.isFinite(v)) continue;
       ctx.beginPath();
       ctx.arc(x, py(v), 4, 0, 2 * Math.PI);
@@ -300,6 +320,12 @@ export class TimeGraph {
     }
     if (lo > 0 && Math.abs(this.times[this.index(lo - 1)] - t) < Math.abs(this.times[this.index(lo)] - t)) lo--;
     return lo;
+  }
+
+  /** Value in axis units: decades on a log axis (NaN for v ≤ 0). */
+  private toAxis(v: number): number {
+    if (this.scale === 'linear') return v;
+    return v > 0 ? Math.log10(v) : NaN;
   }
 
   private index(i: number): number {
