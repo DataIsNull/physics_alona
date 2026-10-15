@@ -18,7 +18,7 @@ export function energyGraph(options: { potential?: boolean; losses?: boolean } =
     if (potential) series.push({ label: 'Потенціальна', color: theme.series[1] });
     if (losses) {
       series.push({ label: 'Втрати', color: theme.series[3] });
-      series.push({ label: 'Сума з втратами', color: theme.series[2] });
+      series.push({ label: 'Баланс енергії', color: theme.series[2] });
     } else {
       series.push({ label: 'Повна', color: theme.series[2] });
     }

@@ -264,6 +264,31 @@ input:focus-visible {
   pointer-events: none;
 }
 
+/* Scene parameters */
+
+.params {
+  display: grid;
+  gap: 8px;
+}
+
+.param {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  color: var(--ink-2);
+}
+
+.param input {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.param output {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Stats panel */
 
 .panel {

@@ -3,7 +3,7 @@ import { type LengthUnit, METRES, formatDuration, formatLength } from '../core/u
 import type { Vec2 } from '../core/vec2';
 import type { RenderLayers } from '../render/renderer';
 import { STAGES } from '../scenes';
-import type { Scene } from '../scenes/types';
+import type { Params, Scene, SceneParam } from '../scenes/types';
 import { byId, noFocusOnClick } from './dom';
 
 export interface ControlHandlers {
@@ -155,6 +155,38 @@ export class Controls {
     this.playButton.classList.toggle('is-paused', paused);
     this.playButton.setAttribute('aria-label', paused ? 'Пуск' : 'Пауза');
     this.playButton.title = paused ? 'Пуск (Пробіл)' : 'Пауза (Пробіл)';
+  }
+
+  /** Renders sliders for a scene's parameters; `onChange` fires while dragging. */
+  showParams(params: readonly SceneParam[], values: Params, onChange: (id: string, value: number) => void): void {
+    const root = byId('params');
+    root.replaceChildren();
+    root.hidden = params.length === 0;
+    if (params.length === 0) return;
+    const title = document.createElement('h2');
+    title.textContent = 'Параметри';
+    root.append(title);
+    for (const p of params) {
+      const label = document.createElement('label');
+      label.className = 'param';
+      const name = document.createElement('span');
+      name.textContent = p.label;
+      const output = document.createElement('output');
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(p.min);
+      input.max = String(p.max);
+      input.step = String(p.step);
+      input.value = String(values[p.id] ?? p.value);
+      const show = () => (output.value = p.format ? p.format(Number(input.value)) : input.value);
+      show();
+      input.addEventListener('input', () => {
+        show();
+        onChange(p.id, Number(input.value));
+      });
+      label.append(name, output, input);
+      root.append(label);
+    }
   }
 
   /** Applies a scene's step and speed ranges and their starting values. */

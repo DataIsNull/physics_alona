@@ -11,8 +11,52 @@ export interface Force {
   apply(particles: Particles, pos: Float64Array, vel: Float64Array, t: number, acc: Float64Array): void;
   /** Potential energy, J. Only conservative forces define it. */
   potential?(particles: Particles, pos: Float64Array): number;
-  /** Power of a dissipative force, W (≤ 0). Lets the world track energy turned into heat. */
-  power?(particles: Particles, pos: Float64Array, vel: Float64Array): number;
+  /**
+   * Power of a non-conservative force, W. Dissipative forces (drag,
+   * friction) return ≤ 0 and feed the heat tally; driving forces
+   * (`drives: true`) feed the external-work tally.
+   */
+  power?(particles: Particles, pos: Float64Array, vel: Float64Array, t: number): number;
+  /** Marks a force that pumps energy in from outside (a hand, a motor, a loudspeaker). */
+  readonly drives?: boolean;
+}
+
+/**
+ * Periodic driving force F(t) = F₀·cos(ωt + φ) along a fixed direction on
+ * chosen particles. Its work is booked as external work, so the energy
+ * balance still closes for driven, damped oscillators.
+ */
+export class HarmonicForce implements Force {
+  readonly drives = true;
+
+  constructor(
+    readonly targets: readonly number[],
+    /** Force amplitude, N. */
+    readonly amplitude: number,
+    /** Angular frequency, rad/s. */
+    readonly omega: number,
+    readonly direction: Vec2 = new Vec2(1, 0),
+    readonly phase = 0,
+  ) {}
+
+  force(t: number): number {
+    return this.amplitude * Math.cos(this.omega * t + this.phase);
+  }
+
+  apply(particles: Particles, _pos: Float64Array, _vel: Float64Array, t: number, acc: Float64Array): void {
+    const f = this.force(t);
+    for (const i of this.targets) {
+      acc[2 * i] += f * this.direction.x * particles.invMass[i];
+      acc[2 * i + 1] += f * this.direction.y * particles.invMass[i];
+    }
+  }
+
+  power(_particles: Particles, _pos: Float64Array, vel: Float64Array, t: number): number {
+    const f = this.force(t);
+    let p = 0;
+    for (const i of this.targets) p += f * (this.direction.x * vel[2 * i] + this.direction.y * vel[2 * i + 1]);
+    return p;
+  }
 }
 
 /** Stokes drag F = −b·v: slow motion through a viscous medium, or plain damping. */

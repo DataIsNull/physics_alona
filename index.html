@@ -8,7 +8,7 @@
   </head>
   <body>
     <header class="toolbar">
-      <div class="brand">Фізичний симулятор <span class="stage">етап 3</span></div>
+      <div class="brand">Фізичний симулятор <span class="stage">етап 4</span></div>
 
       <label class="field">
         <span>Сцена</span>
@@ -72,7 +72,10 @@
         <div id="cursor" class="cursor"></div>
       </section>
 
-      <aside id="stats" class="panel" aria-label="Показники"></aside>
+      <aside class="panel" aria-label="Показники">
+        <section id="params" class="stats-block params" hidden></section>
+        <div id="stats"></div>
+      </aside>
 
       <section class="graph" aria-labelledby="graph-title">
         <div class="graph-head">

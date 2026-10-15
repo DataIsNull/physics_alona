@@ -76,6 +76,7 @@ export class World implements Simulation {
   private readonly initialVel: Float64Array;
   private readonly fixedIndices: number[] = [];
   private readonly dissipativeForces: Force[];
+  private readonly drivingForces: Force[];
   private readonly maxStep: ((world: World) => number) | null;
   /** Grab spring frequency for the current step: stiff, but never stiffer than the step can follow. */
   private grabOmega = GRAB_OMEGA;
@@ -93,7 +94,8 @@ export class World implements Simulation {
     this.customLabel = options.label;
     this.color = options.color ?? '#e2e8f0';
     for (let i = 0; i < this.particles.count; i++) if (this.particles.isFixed(i)) this.fixedIndices.push(i);
-    this.dissipativeForces = this.forces.filter((f) => f.power);
+    this.dissipativeForces = this.forces.filter((f) => f.power && !f.drives);
+    this.drivingForces = this.forces.filter((f) => f.power && f.drives);
     this.maxStep = options.maxStep ?? null;
     this.dissipative = this.dissipativeForces.length > 0 || this.collisions !== null || this.constraintLosses;
     this.initialPos = this.particles.pos.slice();
@@ -151,7 +153,8 @@ export class World implements Simulation {
 
     // The grab force and a moved pin change accelerations behind the integrator's back.
     if (grab) this.integrator.reset?.();
-    const powerBefore = this.dissipativePower();
+    const powerBefore = this.forcePower(this.dissipativeForces, this.t);
+    const drivePowerBefore = this.forcePower(this.drivingForces, this.t);
     const constrained = this.constraints.length > 0;
     if (constrained) this.constraintSolver.begin(pos);
     this.integrator.step(pos, vel, this.t, dt, this.accel);
@@ -168,9 +171,13 @@ export class World implements Simulation {
     }
     if (this.dissipativeForces.length > 0) {
       // Trapezoidal rule on the dissipated power.
-      this.dissipated -= 0.5 * (powerBefore + this.dissipativePower()) * dt;
+      this.dissipated -= 0.5 * (powerBefore + this.forcePower(this.dissipativeForces, this.t + dt)) * dt;
     }
-    if (grab) this.externalWork += this.totalEnergy() + this.dissipated - balanceBefore;
+    if (grab) {
+      this.externalWork += this.totalEnergy() + this.dissipated - balanceBefore;
+    } else if (this.drivingForces.length > 0) {
+      this.externalWork += 0.5 * (drivePowerBefore + this.forcePower(this.drivingForces, this.t + dt)) * dt;
+    }
 
     this.t += dt;
     this.steps++;
@@ -231,7 +238,9 @@ export class World implements Simulation {
    */
   energyDrift(): number {
     const e0 = this.initialEnergy;
-    return (this.energyBalance() - e0) / (Math.abs(e0) || 1);
+    // Driven or damped systems may start at rest: measure against the energy that flowed through.
+    const scale = Math.max(Math.abs(e0), Math.abs(this.externalWork), this.dissipated) || 1;
+    return (this.energyBalance() - e0) / scale;
   }
 
   momentum(): Vec2 {
@@ -290,9 +299,9 @@ export class World implements Simulation {
     return best;
   }
 
-  private dissipativePower(): number {
+  private forcePower(forces: readonly Force[], t: number): number {
     let p = 0;
-    for (const force of this.dissipativeForces) p += force.power!(this.particles, this.particles.pos, this.particles.vel);
+    for (const force of forces) p += force.power!(this.particles, this.particles.pos, this.particles.vel, t);
     return p;
   }
 }

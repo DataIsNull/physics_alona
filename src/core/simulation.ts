@@ -40,6 +40,9 @@ export interface Simulation {
 
   trailSources(): TrailSource[];
 
+  /** Largest distance from a known exact solution, m; absent when there is none. */
+  exactError?(): number | null;
+
   /** Whether a press at `point` would grab something; `pixel` is metres per screen pixel. */
   hitTest(point: Vec2, pixel: number): boolean;
   /** Starts dragging whatever lies under `point`; false if nothing does. */

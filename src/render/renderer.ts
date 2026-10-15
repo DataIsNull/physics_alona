@@ -5,9 +5,12 @@ import { type LengthUnit, METRES } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import { MIN_PARTICLE_PX, World } from '../core/world';
 import { RigidWorld } from '../rigid/world';
+import { WaveField } from '../waves/field';
+import { WaveString } from '../waves/string';
 import type { Camera } from './camera';
 import { drawGrid } from './grid';
 import { drawRigidWorld } from './rigidRenderer';
+import { drawField, drawString } from './waveRenderer';
 import { theme } from './theme';
 import type { Trail } from './trail';
 
@@ -69,7 +72,9 @@ export class Renderer {
     ctx.fillStyle = theme.surface;
     ctx.fillRect(0, 0, camera.width, camera.height);
     drawGrid(ctx, camera, this.unit);
+    for (const view of views) if (view.sim instanceof WaveField) drawField(ctx, camera, view.sim);
     overlay?.(ctx, camera, views.map((v) => v.sim));
+    for (const view of views) if (view.sim instanceof WaveString) drawString(ctx, camera, view.sim, layers);
 
     for (const view of views) {
       if (view.sim instanceof RigidWorld) drawRigidWorld(ctx, camera, view.sim, layers);

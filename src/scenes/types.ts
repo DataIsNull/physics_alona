@@ -5,6 +5,20 @@ import type { LengthUnit } from '../core/units';
 import type { Bounds, Camera } from '../render/camera';
 import type { AxisScale, SeriesSpec } from '../render/graph';
 
+/** A tunable knob of a scene, shown as a slider; changing it rebuilds the scene. */
+export interface SceneParam {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  format?(value: number): string;
+}
+
+/** Current values of a scene's parameters, by id. */
+export type Params = Readonly<Record<string, number>>;
+
 /** What the graph under the canvas plots, sampled from the scene's simulations. */
 export interface GraphSpec<S extends Simulation = Simulation> {
   title: string;
@@ -28,7 +42,9 @@ export interface Scene<S extends Simulation = Simulation> {
   dt: number;
   /** World region framed on load. */
   view: Bounds;
-  graph(worlds: readonly S[]): GraphSpec<S>;
+  graph(worlds: readonly S[], params: Params): GraphSpec<S>;
+  /** Sliders for the scene's own parameters (drive frequency, source speed…). */
+  params?: SceneParam[];
   /** Each world brings its own integrator; the UI picker is disabled. */
   fixedIntegrators?: boolean;
   /** Shown instead of the integrator summary when the picker is disabled. */
@@ -45,16 +61,16 @@ export interface Scene<S extends Simulation = Simulation> {
   /** Integrator selected when the scene loads (velocity Verlet otherwise). */
   integrator?: IntegratorId;
   /** Extra drawing under the bodies, e.g. Kepler's equal-area sectors. */
-  overlay?(ctx: CanvasRenderingContext2D, camera: Camera, worlds: readonly S[]): void;
+  overlay?(ctx: CanvasRenderingContext2D, camera: Camera, worlds: readonly S[], params: Params): void;
   /**
    * Energy leaves without being booked as losses (rigid-body impacts,
    * damping), so it only shows as a drop in E.
    */
   losesEnergy?: boolean;
-  build(integrator: IntegratorId): S[];
+  build(integrator: IntegratorId, params: Params): S[];
   /**
    * Exact solution, when one exists, drawn as ghosts and used for error stats.
    * Returns null for particles without one.
    */
-  analytic?(world: number, particle: number, t: number): Vec2 | null;
+  analytic?(world: number, particle: number, t: number, params: Params): Vec2 | null;
 }

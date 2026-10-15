@@ -10,6 +10,7 @@ import { type RenderLayers, Renderer, type SimView } from './render/renderer';
 import { Trail } from './render/trail';
 import { SCENES } from './scenes';
 import type { GraphSpec, Scene } from './scenes/types';
+import type { AnalyticFn, Overlay } from './render/renderer';
 import { Controls, DEFAULT_DT_RANGE, DEFAULT_SPEED_RANGE } from './ui/controls';
 import { byId } from './ui/dom';
 import { attachCameraInput } from './ui/input';
@@ -39,6 +40,8 @@ export class App {
 
   private scene!: Scene;
   private graphSpec!: GraphSpec;
+  /** Current values of the scene's sliders. */
+  private params: Record<string, number> = {};
   private views: SimView[] = [];
   private sims: Simulation[] = [];
   /** Simulation the pointer is dragging something in. */
@@ -113,6 +116,11 @@ export class App {
     );
     this.renderer.unit = scene.lengthUnit ?? METRES;
     this.controls.showScene(scene, this.integrator);
+    this.params = Object.fromEntries((scene.params ?? []).map((p) => [p.id, p.value]));
+    this.controls.showParams(scene.params ?? [], this.params, (id, value) => {
+      this.params[id] = value;
+      this.buildWorlds();
+    });
     this.buildWorlds();
     this.needsFit = true;
     history.replaceState(null, '', `#${this.scene.id}`);
@@ -126,19 +134,19 @@ export class App {
 
   private buildWorlds(): void {
     this.grabbed = null;
-    this.sims = this.scene.build(this.integrator);
+    this.sims = this.scene.build(this.integrator, this.params);
     this.views = this.sims.map((sim) => {
       const sources = sim.trailSources();
       return { sim, sources, trails: sources.map(() => new Trail()) };
     });
 
     const worlds = this.sims;
-    this.graphSpec = this.scene.graph(worlds);
+    this.graphSpec = this.scene.graph(worlds, this.params);
     byId('graph-title').textContent = this.graphSpec.title;
     this.graph.configure(this.graphSpec.series, this.graphSpec.format, this.graphSpec.scale);
     this.stats.configure(
       worlds.map((w) => ({ label: w.label, color: w.color, dissipative: w.dissipative })),
-      !!this.scene.analytic,
+      !!this.scene.analytic || worlds.some((w) => (w.exactError?.() ?? null) !== null),
       this.renderer.unit,
     );
     this.restart();
@@ -241,10 +249,11 @@ export class App {
       let error: number | null = null;
       if (analytic && sim instanceof World) {
         for (let i = 0; i < sim.particles.count; i++) {
-          const exact = analytic(w, i, sim.t);
+          const exact = analytic(w, i, sim.t, this.params);
           if (exact) error = Math.max(error ?? 0, sim.particles.position(i).distanceTo(exact));
         }
       }
+      if (!(sim instanceof World)) error = sim.exactError?.() ?? null;
       return {
         energy: sim.totalEnergy(),
         dissipated: sim.dissipated,
@@ -279,7 +288,11 @@ export class App {
       this.fit();
       this.needsFit = false;
     }
-    this.renderer.render(this.views, this.layers, this.scene.analytic, this.scene.overlay?.bind(this.scene));
+    const { analytic, overlay } = this.scene;
+    const params = this.params;
+    const exact: AnalyticFn | undefined = analytic && ((w, i, t) => analytic(w, i, t, params));
+    const extra: Overlay | undefined = overlay && ((ctx, camera, sims) => overlay(ctx, camera, sims, params));
+    this.renderer.render(this.views, this.layers, exact, extra);
     this.graph.draw();
 
     if (now - this.lastStats >= STATS_INTERVAL) {

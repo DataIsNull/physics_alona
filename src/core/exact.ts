@@ -138,3 +138,22 @@ export function lagrangePoints(m1: number, m2: number, a: number): Vec2[] {
     new Vec2((0.5 - mu) * a, -h * a),
   ];
 }
+
+/** Steady-state amplitude of ẍ + γẋ + ω₀²x = a·cos(ωt): a/√((ω₀² − ω²)² + γ²ω²). */
+export function drivenAmplitude(omega0: number, gamma: number, a: number, omega: number): number {
+  return a / Math.hypot(omega0 * omega0 - omega * omega, gamma * omega);
+}
+
+/**
+ * Driven, damped oscillator started from rest: ẍ + γẋ + ω₀²x = a·cos(ωt),
+ * x(0) = ẋ(0) = 0, underdamped (γ < 2ω₀). The steady response
+ * A·cos(ωt − δ) plus a decaying transient that cancels it at t = 0.
+ */
+export function drivenOscillator(omega0: number, gamma: number, a: number, omega: number, t: number): number {
+  const A = drivenAmplitude(omega0, gamma, a, omega);
+  const delta = Math.atan2(gamma * omega, omega0 * omega0 - omega * omega);
+  const wd = Math.sqrt(omega0 * omega0 - (gamma * gamma) / 4);
+  const c1 = -A * Math.cos(delta);
+  const c2 = ((gamma / 2) * c1 - A * omega * Math.sin(delta)) / wd;
+  return A * Math.cos(omega * t - delta) + Math.exp((-gamma * t) / 2) * (c1 * Math.cos(wd * t) + c2 * Math.sin(wd * t));
+}
