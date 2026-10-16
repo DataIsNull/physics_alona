@@ -21,6 +21,19 @@ export const ELEMENTARY_CHARGE = 1.602_176_634e-19;
 /** Speed of light in vacuum, m/s (exact). */
 export const SPEED_OF_LIGHT = 299_792_458;
 
+/** Vacuum permittivity ε₀, F/m (CODATA 2018). */
+export const VACUUM_PERMITTIVITY = 8.854_187_8128e-12;
+
+/** Vacuum permeability μ₀, H/m (CODATA 2018). */
+export const VACUUM_PERMEABILITY = 1.256_637_062_12e-6;
+
+/** Coulomb constant k = 1/(4πε₀), N·m²/C². */
+export const COULOMB = 1 / (4 * Math.PI * VACUUM_PERMITTIVITY);
+
+/** Electron and proton masses, kg (CODATA 2018). */
+export const ELECTRON_MASS = 9.109_383_7015e-31;
+export const PROTON_MASS = 1.672_621_923_69e-27;
+
 /** Astronomical unit, m (exact, IAU 2012). */
 export const AU = 1.495_978_707e11;
 
