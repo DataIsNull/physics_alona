@@ -43,6 +43,7 @@ export interface LengthUnit {
 }
 
 export const METRES: LengthUnit = { symbol: 'м', metres: 1 };
+export const CENTIMETRES: LengthUnit = { symbol: 'см', metres: 0.01 };
 export const ASTRONOMICAL_UNITS: LengthUnit = { symbol: 'а.о.', metres: AU };
 export const KILOPARSECS: LengthUnit = { symbol: 'кпк', metres: KPC };
 

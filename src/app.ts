@@ -285,7 +285,8 @@ export class App {
     this.stepsLastFrame = this.advance(this.clock.advance(realDt));
 
     this.renderer.resize();
-    if (this.needsFit) {
+    // A canvas not laid out yet (a hidden tab) has no size to fit to: wait for one.
+    if (this.needsFit && this.camera.width > 1) {
       this.fit();
       this.needsFit = false;
     }

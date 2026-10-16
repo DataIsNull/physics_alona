@@ -9,9 +9,10 @@ const NEGATIVE: [number, number, number] = [0x39, 0x87, 0xe5];
 const NEUTRAL: [number, number, number] = [0x2b, 0x2b, 0x29];
 const POSITIVE: [number, number, number] = [0xe6, 0x67, 0x67];
 const WALL: [number, number, number] = [0x89, 0x87, 0x81];
-const LUT_SIZE = 512;
+export const LUT_SIZE = 512;
 
-const lut = (() => {
+/** Diverging colour table (blue · neutral · red) over LUT_SIZE steps of −1 … 1, shared with the flow renderer. */
+export const lut = (() => {
   const table = new Uint8ClampedArray(LUT_SIZE * 3);
   for (let k = 0; k < LUT_SIZE; k++) {
     const s = (2 * k) / (LUT_SIZE - 1) - 1; // −1 … 1

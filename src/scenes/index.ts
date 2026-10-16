@@ -1,4 +1,5 @@
 import { airDrag } from './airDrag';
+import { archimedes } from './archimedes';
 import { atmosphere } from './atmosphere';
 import { billiards } from './billiards';
 import { bouncingBalls } from './bouncingBalls';
@@ -6,6 +7,7 @@ import { bridge } from './bridge';
 import { brownian } from './brownian';
 import { cloth } from './cloth';
 import { coupledPendulums } from './coupledPendulums';
+import { damBreak } from './damBreak';
 import { doublePendulum } from './doublePendulum';
 import { doubleSlit } from './doubleSlit';
 import { doppler } from './doppler';
@@ -25,13 +27,17 @@ import { mixing } from './mixing';
 import { phases } from './phases';
 import { pendulum } from './pendulum';
 import { physicalPendulum } from './physicalPendulum';
+import { poiseuille } from './poiseuille';
 import { resonance } from './resonance';
 import { solarSystem } from './solarSystem';
 import { springOscillator } from './spring';
 import { standingWaves } from './standingWaves';
 import { stringPulse } from './stringPulse';
+import { torricelli } from './torricelli';
 import { tower } from './tower';
 import type { Scene } from './types';
+import { vessels } from './vessels';
+import { vortexStreet } from './vortexStreet';
 
 export const STAGES: Record<number, string> = {
   0: 'Етап 0 · Ядро',
@@ -40,6 +46,7 @@ export const STAGES: Record<number, string> = {
   3: 'Етап 3 · Гравітація N тіл',
   4: 'Етап 4 · Коливання і хвилі',
   5: 'Етап 5 · Термодинаміка',
+  6: 'Етап 6 · Рідини',
 };
 
 export const SCENES: readonly Scene[] = [
@@ -76,4 +83,10 @@ export const SCENES: readonly Scene[] = [
   phases,
   brownian,
   atmosphere,
+  damBreak,
+  archimedes,
+  vessels,
+  torricelli,
+  vortexStreet,
+  poiseuille,
 ];

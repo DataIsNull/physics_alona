@@ -4,12 +4,15 @@ import type { Simulation, TrailSource } from '../core/simulation';
 import { type LengthUnit, METRES } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import { MIN_PARTICLE_PX, World } from '../core/world';
+import { FlowWorld } from '../fluid/lbm';
+import { SphWorld } from '../fluid/sph';
 import { RigidWorld } from '../rigid/world';
 import { GasWorld } from '../thermo/gas';
 import { WaveField } from '../waves/field';
 import { WaveString } from '../waves/string';
 import type { Camera } from './camera';
 import { drawGrid } from './grid';
+import { drawFlow, drawSph } from './fluidRenderer';
 import { drawGas } from './gasRenderer';
 import { drawRigidWorld } from './rigidRenderer';
 import { drawField, drawString } from './waveRenderer';
@@ -75,9 +78,11 @@ export class Renderer {
     ctx.fillRect(0, 0, camera.width, camera.height);
     drawGrid(ctx, camera, this.unit);
     for (const view of views) if (view.sim instanceof WaveField) drawField(ctx, camera, view.sim);
+    for (const view of views) if (view.sim instanceof FlowWorld) drawFlow(ctx, camera, view.sim);
     overlay?.(ctx, camera, views.map((v) => v.sim));
     for (const view of views) if (view.sim instanceof WaveString) drawString(ctx, camera, view.sim, layers);
     for (const view of views) if (view.sim instanceof GasWorld) drawGas(ctx, camera, view.sim);
+    for (const view of views) if (view.sim instanceof SphWorld) drawSph(ctx, camera, view.sim);
 
     for (const view of views) {
       if (view.sim instanceof RigidWorld) drawRigidWorld(ctx, camera, view.sim, layers);
