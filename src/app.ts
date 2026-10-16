@@ -119,7 +119,8 @@ export class App {
     this.params = Object.fromEntries((scene.params ?? []).map((p) => [p.id, p.value]));
     this.controls.showParams(scene.params ?? [], this.params, (id, value) => {
       this.params[id] = value;
-      this.buildWorlds();
+      if (this.scene.update) this.scene.update(this.sims, this.params);
+      else this.buildWorlds();
     });
     this.buildWorlds();
     this.needsFit = true;
@@ -288,11 +289,12 @@ export class App {
       this.fit();
       this.needsFit = false;
     }
-    const { analytic, overlay } = this.scene;
+    const { analytic, overlay, foreground } = this.scene;
     const params = this.params;
     const exact: AnalyticFn | undefined = analytic && ((w, i, t) => analytic(w, i, t, params));
-    const extra: Overlay | undefined = overlay && ((ctx, camera, sims) => overlay(ctx, camera, sims, params));
-    this.renderer.render(this.views, this.layers, exact, extra);
+    const under: Overlay | undefined = overlay && ((ctx, camera, sims) => overlay(ctx, camera, sims, params));
+    const over: Overlay | undefined = foreground && ((ctx, camera, sims) => foreground(ctx, camera, sims, params));
+    this.renderer.render(this.views, this.layers, exact, under, over);
     this.graph.draw();
 
     if (now - this.lastStats >= STATS_INTERVAL) {

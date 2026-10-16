@@ -12,6 +12,12 @@ export const AIR_DENSITY = 1.225;
 /** Degrees → radians. */
 export const DEG = Math.PI / 180;
 
+/** Boltzmann constant, J/K (exact). */
+export const BOLTZMANN = 1.380_649e-23;
+
+/** Elementary charge, C (exact); also joules per electronvolt. */
+export const ELEMENTARY_CHARGE = 1.602_176_634e-19;
+
 /** Speed of light in vacuum, m/s (exact). */
 export const SPEED_OF_LIGHT = 299_792_458;
 
@@ -81,6 +87,9 @@ const PREFIXES: ReadonlyArray<readonly [factor: number, symbol: string]> = [
   [1e-6, 'мк'],
   [1e-9, 'н'],
   [1e-12, 'п'],
+  [1e-15, 'ф'],
+  [1e-18, 'а'],
+  [1e-21, 'з'],
 ];
 
 /**
@@ -94,7 +103,7 @@ export function formatSI(value: number, unit: string, digits = 3): string {
 
   // Pick the prefix from the rounded magnitude so 999.96 becomes "1 к…", not "1000 …".
   const rounded = Number(Math.abs(value).toPrecision(digits));
-  if (rounded >= 1e15 || rounded < 1e-12) return `${value.toExponential(digits - 1)} ${unit}`;
+  if (rounded >= 1e15 || rounded < 1e-21) return `${value.toExponential(digits - 1)} ${unit}`;
 
   const [factor, symbol] = PREFIXES.find(([f]) => rounded >= f)!;
   const scaled = Number((value / factor).toPrecision(digits));
@@ -110,3 +119,10 @@ export function formatPercent(fraction: number): string {
   const body = abs >= 0.01 && abs < 1e4 ? String(Number(abs.toPrecision(3))) : abs.toExponential(1);
   return `${p > 0 ? '+' : '−'}${body} %`;
 }
+
+/** Energy in electronvolts, the natural unit for atoms: formatElectronvolts(1.6e-21) → "10 меВ". */
+export function formatElectronvolts(joules: number, digits = 3): string {
+  return formatSI(joules / ELEMENTARY_CHARGE, 'еВ', digits);
+}
+
+export const formatKelvin = (kelvin: number) => `${Number(kelvin.toPrecision(3))} К`;

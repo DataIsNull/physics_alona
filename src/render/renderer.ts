@@ -5,10 +5,12 @@ import { type LengthUnit, METRES } from '../core/units';
 import type { Vec2 } from '../core/vec2';
 import { MIN_PARTICLE_PX, World } from '../core/world';
 import { RigidWorld } from '../rigid/world';
+import { GasWorld } from '../thermo/gas';
 import { WaveField } from '../waves/field';
 import { WaveString } from '../waves/string';
 import type { Camera } from './camera';
 import { drawGrid } from './grid';
+import { drawGas } from './gasRenderer';
 import { drawRigidWorld } from './rigidRenderer';
 import { drawField, drawString } from './waveRenderer';
 import { theme } from './theme';
@@ -66,7 +68,7 @@ export class Renderer {
     return changed;
   }
 
-  render(views: readonly SimView[], layers: RenderLayers, analytic?: AnalyticFn, overlay?: Overlay): void {
+  render(views: readonly SimView[], layers: RenderLayers, analytic?: AnalyticFn, overlay?: Overlay, foreground?: Overlay): void {
     const { ctx, camera } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = theme.surface;
@@ -75,6 +77,7 @@ export class Renderer {
     for (const view of views) if (view.sim instanceof WaveField) drawField(ctx, camera, view.sim);
     overlay?.(ctx, camera, views.map((v) => v.sim));
     for (const view of views) if (view.sim instanceof WaveString) drawString(ctx, camera, view.sim, layers);
+    for (const view of views) if (view.sim instanceof GasWorld) drawGas(ctx, camera, view.sim);
 
     for (const view of views) {
       if (view.sim instanceof RigidWorld) drawRigidWorld(ctx, camera, view.sim, layers);
@@ -99,6 +102,7 @@ export class Renderer {
     for (const world of worlds) this.drawParticles(world);
     if (layers.velocities) for (const world of worlds) this.drawVelocities(world);
     for (const world of worlds) this.drawGrab(world);
+    foreground?.(ctx, camera, views.map((v) => v.sim));
   }
 
   /** Shades the solid side of a wall and draws its surface line. */

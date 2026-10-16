@@ -1,7 +1,9 @@
 import { airDrag } from './airDrag';
+import { atmosphere } from './atmosphere';
 import { billiards } from './billiards';
 import { bouncingBalls } from './bouncingBalls';
 import { bridge } from './bridge';
+import { brownian } from './brownian';
 import { cloth } from './cloth';
 import { coupledPendulums } from './coupledPendulums';
 import { doublePendulum } from './doublePendulum';
@@ -10,6 +12,7 @@ import { doppler } from './doppler';
 import { freeFall } from './freeFall';
 import { galaxies } from './galaxies';
 import { halley } from './halley';
+import { idealGas } from './idealGas';
 import { incline } from './incline';
 import { integratorCompare } from './integratorCompare';
 import { interference } from './interference';
@@ -18,6 +21,8 @@ import { lagrange } from './lagrange';
 import { linkage } from './linkage';
 import { membrane } from './membrane';
 import { mercury } from './mercury';
+import { mixing } from './mixing';
+import { phases } from './phases';
 import { pendulum } from './pendulum';
 import { physicalPendulum } from './physicalPendulum';
 import { resonance } from './resonance';
@@ -34,6 +39,7 @@ export const STAGES: Record<number, string> = {
   2: 'Етап 2 · Тверді тіла',
   3: 'Етап 3 · Гравітація N тіл',
   4: 'Етап 4 · Коливання і хвилі',
+  5: 'Етап 5 · Термодинаміка',
 };
 
 export const SCENES: readonly Scene[] = [
@@ -65,4 +71,9 @@ export const SCENES: readonly Scene[] = [
   interference,
   doubleSlit,
   doppler,
+  idealGas,
+  mixing,
+  phases,
+  brownian,
+  atmosphere,
 ];

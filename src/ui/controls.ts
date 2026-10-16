@@ -107,8 +107,8 @@ export class Controls {
       byId('time-scale'),
       byId('time-scale-out'),
       ...DEFAULT_SPEED_RANGE,
-      // Up to ×60 read as a factor; beyond that as simulated time per real second.
-      (v) => (v <= 60 ? `×${v < 1 ? v.toFixed(2) : Number(v.toPrecision(3))}` : `${formatDuration(v, 2)}/с`),
+      // Between ×0.01 and ×60 read as a factor; otherwise as simulated time per real second.
+      (v) => (v >= 0.01 && v <= 60 ? `×${v < 1 ? v.toFixed(2) : Number(v.toPrecision(3))}` : `${formatDuration(v, 2)}/с`),
       on.timeScale,
       (v) => (Math.abs(v - 1) < 0.06 ? 1 : v),
     );

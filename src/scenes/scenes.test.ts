@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SCENES } from '.';
 
 describe.each(SCENES.map((s) => [s.id, s] as const))('scene %s', (_id, scene) => {
-  /** 3 s of simulated time, but at least 50 steps (orbital scenes step in days). */
-  const steps = Math.max(Math.round(3 / scene.dt), 50);
+  /** 3 s of simulated time, but between 50 steps (orbits step in days) and 1500 (molecules step in femtoseconds). */
+  const steps = Math.min(Math.max(Math.round(3 / scene.dt), 50), 1500);
   const params = Object.fromEntries((scene.params ?? []).map((p) => [p.id, p.value]));
 
   it('builds, runs without diverging and samples its graph', () => {

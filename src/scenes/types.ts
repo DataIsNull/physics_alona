@@ -45,6 +45,11 @@ export interface Scene<S extends Simulation = Simulation> {
   graph(worlds: readonly S[], params: Params): GraphSpec<S>;
   /** Sliders for the scene's own parameters (drive frequency, source speed…). */
   params?: SceneParam[];
+  /**
+   * Applies changed parameters to the running simulations (say, a heat
+   * bath's temperature). Without it a change rebuilds the scene from scratch.
+   */
+  update?(worlds: readonly S[], params: Params): void;
   /** Each world brings its own integrator; the UI picker is disabled. */
   fixedIntegrators?: boolean;
   /** Shown instead of the integrator summary when the picker is disabled. */
@@ -62,6 +67,8 @@ export interface Scene<S extends Simulation = Simulation> {
   integrator?: IntegratorId;
   /** Extra drawing under the bodies, e.g. Kepler's equal-area sectors. */
   overlay?(ctx: CanvasRenderingContext2D, camera: Camera, worlds: readonly S[], params: Params): void;
+  /** Drawing on top of everything, e.g. an inset histogram. */
+  foreground?(ctx: CanvasRenderingContext2D, camera: Camera, worlds: readonly S[], params: Params): void;
   /**
    * Energy leaves without being booked as losses (rigid-body impacts,
    * damping), so it only shows as a drop in E.
